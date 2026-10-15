@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VinSport Control Panel</title>
+    <meta charset="utf-8">
+    <HTA:APPLICATION
+        APPLICATIONNAME="VinSport Control Panel"
+        SCROLL="no"
+        SINGLEINSTANCE="yes"
+        WINDOWSTATE="normal"
+        INNERBORDER="no"
+        SYSMENU="yes"
+        MAXIMIZEBUTTON="no"
+        MINIMIZEBUTTON="yes"
+    >
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background-color: #f0f2f5; 
+            margin: 0; 
+            padding: 20px; 
+            text-align: center; 
+        }
+        .container { 
+            background-color: white; 
+            padding: 20px 35px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
+            display: inline-block; 
+            text-align: left;
+            min-width: 360px;
+        }
+        h2 { color: #1a73e8; margin-top: 0; border-bottom: 2px solid #f0f2f5; padding-bottom: 10px; }
+        .btn { 
+            display: block; 
+            width: 100%; 
+            padding: 11px; 
+            margin: 8px 0; 
+            border: none; 
+            border-radius: 8px; 
+            font-size: 14px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            color: white; 
+            transition: background 0.2s, transform 0.1s; 
+        }
+        .btn:active { transform: scale(0.98); }
+        .btn-green { background-color: #28a745; }
+        .btn-green:hover { background-color: #218838; }
+        .btn-red { background-color: #dc3545; }
+        .btn-red:hover { background-color: #c82333; }
+        .btn-blue { background-color: #007bff; }
+        .btn-blue:hover { background-color: #0069d9; }
+        .btn-orange { background-color: #fd7e14; }
+        .btn-orange:hover { background-color: #e85e0c; }
+        .btn-purple { background-color: #6f42c1; }
+        .btn-purple:hover { background-color: #593196; }
+        .section-title { margin-top: 18px; margin-bottom: 6px; font-size: 13px; color: #5f6368; font-weight: bold; text-transform: uppercase;}
+        .status-box { font-size: 13px; margin-bottom: 6px; color: #666; }
+    </style>
+    <script language="VBScript">
+        Window.resizeTo 470, 720
+        Set objShell = CreateObject("WScript.Shell")
+        
+        Function GetAppDir()
+            Dim fso, p
+            Set fso = CreateObject("Scripting.FileSystemObject")
+            p = document.location.pathname
+            p = Replace(p, "/", "\")
+            If Left(p, 1) = "\" And Mid(p, 3, 1) = ":" Then
+                p = Mid(p, 2)
+            End If
+            p = Unescape(p)
+            GetAppDir = fso.GetParentFolderName(p)
+        End Function
+        
+        Sub Window_OnLoad
+            ' Tự động chạy Airflow ngầm khi người dùng vừa mở bảng điều khiển
+            Dim appDir
+            appDir = GetAppDir()
+            objShell.Run "cmd /c cd /d """ & appDir & """ && docker-compose up -d", 0, False
+        End Sub
+        
+        Sub Window_OnBeforeUnload
+            ' Tự động tắt Airflow ngầm khi người dùng bấm dấu X để đóng bảng điều khiển
+            Dim appDir
+            appDir = GetAppDir()
+            objShell.Run "cmd /c cd /d """ & appDir & """ && docker-compose down", 0, False
+            ' Tắt các tiến trình Node.js đang chạy ngầm (Backend, Frontend)
+            objShell.Run "cmd /c taskkill /F /IM node.exe /T >nul 2>&1", 0, False
+        End Sub
+        
+        Sub StartAirflow
+            Dim appDir
+            appDir = GetAppDir()
+            objShell.Run "cmd /c """"" & appDir & "\start_airflow.bat""""", 0, False
+            MsgBox "Đã gửi lệnh! Hệ thống đang tự động mở Docker và sẽ chờ cho đến khi nó sẵn sàng để bật Airflow." & vbCrLf & "Bạn không cần làm gì thêm, chỉ cần chờ thanh trạng thái báo '🟢 Đang chạy'.", 64, "VinSport"
+        End Sub
+
+        Sub StopAirflow
+            Dim appDir
+            appDir = GetAppDir()
+            objShell.Run "cmd /c cd /d """ & appDir & """ && docker-compose down", 0, False
+            MsgBox "Đã gửi lệnh tắt luồng dữ liệu (Docker). Quá trình tắt đang được chạy ngầm.", 64, "VinSport"
+        End Sub
+
+        Sub InitDatabase
+            Dim ans
+            ans = MsgBox("⚠️ CẢNH BÁO: Thao tác này sẽ làm mới (Reset) toàn bộ Cơ sở dữ liệu về trạng thái mẫu ban đầu!" & vbCrLf & vbCrLf & _
+                         "• Nếu bạn vừa tải mã nguồn về: Bấm [Yes] để nạp CSDL." & vbCrLf & _
+                         "• Nếu máy bạn ĐÃ CÓ dữ liệu rồi: Bấm [No] để hủy bỏ." & vbCrLf & vbCrLf & _
+                         "Bạn có chắc chắn muốn tiếp tục không?", 36, "Xác nhận Khởi tạo CSDL")
+            If ans <> 6 Then Exit Sub
+            
+            Dim appDir, cmd
+            appDir = GetAppDir()
+            cmd = "cmd /c cd /d """ & appDir & "\backend"" && npm run db:init && echo. && echo ======================================================== && echo [HOAN TAT] Nhan phim bat ky de dong cua so nay... && pause >nul"
+            objShell.Run cmd, 1, False
+        End Sub
+
+        Sub LaunchNodeServers
+            Dim appDir
+            appDir = GetAppDir()
+            ' Dọn dẹp sạch sẽ các tiến trình ngầm cũ (nếu có) trước khi chạy mới
+            objShell.Run "cmd /c taskkill /F /IM node.exe /T >nul 2>&1", 0, True
+            ' Khởi động ngầm Backend và Frontend
+            objShell.Run "cmd /c cd /d """ & appDir & "\backend"" && npm run dev", 0, False
+            objShell.Run "cmd /c cd /d """ & appDir & "\frontend"" && npm run dev", 0, False
+        End Sub
+
+        Sub OpenBrowser(url)
+            objShell.Run "cmd /c start " & url, 0, False
+        End Sub
+
+        Sub OpenAirflowWeb
+            objShell.Run "http://localhost:8080"
+        End Sub
+    </script>
+    <script language="JavaScript">
+        function checkAirflowStatus() {
+            try {
+                var xhr = new ActiveXObject("MSXML2.XMLHTTP");
+                xhr.open("GET", "http://localhost:8080/health", true);
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState == 4) {
+                        var statusEl = document.getElementById("airflow-status");
+                        if (xhr.status == 200) {
+                            statusEl.innerHTML = "Trạng thái: <span style='color:#28a745;font-weight:bold'>🟢 Đang chạy</span>";
+                        } else {
+                            statusEl.innerHTML = "Trạng thái: <span style='color:#dc3545;font-weight:bold'>🔴 Đã tắt (hoặc đang khởi động...)</span>";
+                        }
+                    }
+                };
+                xhr.send();
+            } catch (e) {
+                document.getElementById("airflow-status").innerHTML = "Trạng thái: <span style='color:#dc3545;font-weight:bold'>🔴 Đã tắt</span>";
+            }
+        }
+        
+        function startWebAppWithDelay() {
+            var btn = document.getElementById("btn-start-web");
+            var statusEl = document.getElementById("web-status");
+
+            // 1. Kích hoạt Backend & Frontend chạy ngầm
+            LaunchNodeServers();
+
+            // 2. Cập nhật giao diện đếm ngược 3 giây
+            btn.disabled = true;
+            btn.style.opacity = "0.7";
+            btn.style.cursor = "wait";
+            statusEl.style.display = "block";
+
+            var countdown = 3;
+            statusEl.innerHTML = "Trạng thái: <span style='color:#fd7e14;font-weight:bold'>⏳ Đang load CSDL, Backend & Frontend (" + countdown + "s)...</span>";
+            btn.innerHTML = "⏳ Đang nạp hệ thống (" + countdown + "s)...";
+
+            var timer = window.setInterval(function() {
+                countdown--;
+                if (countdown > 0) {
+                    statusEl.innerHTML = "Trạng thái: <span style='color:#fd7e14;font-weight:bold'>⏳ Đang load CSDL, Backend & Frontend (" + countdown + "s)...</span>";
+                    btn.innerHTML = "⏳ Đang nạp hệ thống (" + countdown + "s)...";
+                } else {
+                    window.clearInterval(timer);
+                    statusEl.innerHTML = "Trạng thái: <span style='color:#28a745;font-weight:bold'>🟢 Website đã load đầy đủ & sẵn sàng!</span>";
+                    btn.innerHTML = "🚀 Khởi động lại Website Bán Hàng";
+                    btn.disabled = false;
+                    btn.style.opacity = "1";
+                    btn.style.cursor = "pointer";
+
+                    // 3. Đúng 3 giây sau, mở trình duyệt vào localhost:5173
+                    OpenBrowser("http://localhost:5173");
+                }
+            }, 1000);
+        }
+
+        window.setTimeout(checkAirflowStatus, 500);
+        window.setInterval(checkAirflowStatus, 1000);
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h2>⚙️ VinSport Manager</h2>
+        <p style="color: #666; font-size: 13px;">Bảng điều khiển hệ thống tập trung.</p>
+
+        <div class="section-title">🗄️ CƠ SỞ DỮ LIỆU SQL SERVER</div>
+        <button class="btn btn-purple" onclick="InitDatabase()">⚡ Nạp / Khởi tạo toàn bộ CSDL (1-Click)</button>
+        
+        <div class="section-title">🛒 HỆ THỐNG WEBSITE</div>
+        <div id="web-status" class="status-box" style="display:none;">Trạng thái: <span>Chưa khởi động</span></div>
+        <button id="btn-start-web" class="btn btn-orange" onclick="startWebAppWithDelay()">🚀 Khởi động Website Bán Hàng</button>
+        <button class="btn btn-blue" onclick="OpenBrowser('http://localhost:5173')">🌐 Mở trang Website (localhost:5173)</button>
+        
+        <div class="section-title">📦 HỆ THỐNG DỮ LIỆU (AIRFLOW)</div>
+        <div id="airflow-status" class="status-box">Trạng thái: <span>⏳ Đang kiểm tra...</span></div>
+        <button class="btn btn-green" onclick="StartAirflow()">▶ Bật hệ thống Dữ liệu</button>
+        <button class="btn btn-blue" onclick="OpenAirflowWeb()">🌐 Mở trang quản trị Airflow</button>
+        <button class="btn btn-red" onclick="StopAirflow()">⏹ Tắt hệ thống Dữ liệu</button>
+    </div>
+</body>
+</html>

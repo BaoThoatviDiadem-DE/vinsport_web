@@ -10,6 +10,7 @@ import { Auth } from "./pages/Auth";
 import AdminProducts from "./pages/AdminProducts";
 import AdminUsers from "./pages/AdminUsers";
 import AdminOrders from "./pages/AdminOrders";
+import AdminAnalytics from "./pages/AdminAnalytics";
 import ProtectedAdminRoute from "./components/ProtectedAdminRoute";
 
 export const router = createBrowserRouter([
@@ -24,6 +25,14 @@ export const router = createBrowserRouter([
       { path: "checkout", Component: Checkout },
       { path: "tracking", Component: OrderTracking },
       { path: "login", Component: Auth },
+      {
+        path: "admin/analytics",
+        element: (
+          <ProtectedAdminRoute>
+            <AdminAnalytics />
+          </ProtectedAdminRoute>
+        ),
+      },
       {
         path: "admin/products",
         element: (

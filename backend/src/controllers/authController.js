@@ -1,6 +1,7 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { sql, poolPromise } = require("../db");
+const { uploadUserToS3 } = require("../utils/s3Service");
 
 const login = async (req, res) => {
   try {
@@ -120,6 +121,9 @@ const register = async (req, res) => {
       `);
 
     const newUser = userResult.recordset[0];
+
+    // Gửi lên S3 (bất đồng bộ, không block luồng)
+    uploadUserToS3(newUser.user_id).catch(console.error);
 
     const token = jwt.sign(
       {

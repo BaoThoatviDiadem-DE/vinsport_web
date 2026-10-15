@@ -11,6 +11,7 @@ const orderRoutes = require("./routes/orderRoutes");
 const adminProductRoutes = require("./routes/adminProductRoutes");
 const adminUserRoutes = require("./routes/adminUserRoutes");
 const adminOrderRoutes = require("./routes/adminOrderRoutes");
+const adminAnalyticsRoutes = require("./routes/adminAnalyticsRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -38,6 +39,7 @@ app.use("/api", orderRoutes);
 app.use("/api/admin/products", adminProductRoutes);
 app.use("/api/admin/users", adminUserRoutes);
 app.use("/api/admin/orders", adminOrderRoutes);
+app.use("/api/admin/analytics", adminAnalyticsRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

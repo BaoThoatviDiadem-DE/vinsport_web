@@ -31,6 +31,8 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+*.parquet
+etl/temp_lakehouse/
 
 # SQL Server files
 *.mdf
@@ -38,4 +40,4 @@ Thumbs.db
 *.bak
 
 # Coverage
-coverage/
+coverage/

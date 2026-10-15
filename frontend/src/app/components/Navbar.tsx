@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Users,
   ClipboardList,
+  BarChart3,
 } from "lucide-react";
 import { useCart } from "../contexts/CartContext";
 import { useAuth } from "../contexts/AuthContext";
@@ -34,7 +35,7 @@ export const Navbar = () => {
   const navLinks = [
     { name: "Trang chủ", path: "/" },
     { name: "Sản phẩm", path: "/products" },
-    { name: "Theo dõi đơn hàng", path: "/tracking" },
+    { name: "Đơn hàng của tôi", path: "/tracking" },
   ];
 
   return (
@@ -64,39 +65,51 @@ export const Navbar = () => {
           {user?.role === "admin" && (
             <>
               <Link
+                to="/admin/analytics"
+                className={`hover:text-orange-600 transition-colors flex items-center gap-1.5 ${
+                  location.pathname.startsWith("/admin/analytics")
+                    ? "text-orange-600 font-bold"
+                    : "text-slate-700"
+                }`}
+              >
+                <BarChart3 className="w-4 h-4 text-orange-500" />
+                Thống kê & Báo cáo
+              </Link>
+
+              <Link
                 to="/admin/products"
-                className={`hover:text-orange-600 transition-colors flex items-center gap-2 ${
+                className={`hover:text-orange-600 transition-colors flex items-center gap-1.5 ${
                   location.pathname.startsWith("/admin/products")
-                    ? "text-orange-600"
+                    ? "text-orange-600 font-bold"
                     : "text-slate-700"
                 }`}
               >
                 <ShieldCheck className="w-4 h-4" />
-                Quản lý sản phẩm
+                Sản phẩm
               </Link>
 
               <Link
                 to="/admin/users"
-                className={`hover:text-orange-600 transition-colors flex items-center gap-2 ${
+                className={`hover:text-orange-600 transition-colors flex items-center gap-1.5 ${
                   location.pathname.startsWith("/admin/users")
-                    ? "text-orange-600"
+                    ? "text-orange-600 font-bold"
                     : "text-slate-700"
                 }`}
               >
                 <Users className="w-4 h-4" />
-                Quản lý người dùng
+                Người dùng
               </Link>
 
               <Link
                 to="/admin/orders"
-                className={`hover:text-orange-600 transition-colors flex items-center gap-2 ${
+                className={`hover:text-orange-600 transition-colors flex items-center gap-1.5 ${
                   location.pathname.startsWith("/admin/orders")
-                    ? "text-orange-600"
+                    ? "text-orange-600 font-bold"
                     : "text-slate-700"
                 }`}
               >
                 <ClipboardList className="w-4 h-4" />
-                Quản lý đơn hàng
+                Đơn hàng
               </Link>
             </>
           )}
@@ -198,6 +211,19 @@ export const Navbar = () => {
 
             {user?.role === "admin" && (
               <>
+                <Link
+                  to="/admin/analytics"
+                  onClick={() => setIsMenuOpen(false)}
+                  className={`text-lg flex items-center gap-2 ${
+                    location.pathname.startsWith("/admin/analytics")
+                      ? "text-orange-600 font-bold"
+                      : "text-slate-700"
+                  }`}
+                >
+                  <BarChart3 className="w-5 h-5 text-orange-500" />
+                  Thống kê & Báo cáo
+                </Link>
+
                 <Link
                   to="/admin/products"
                   onClick={() => setIsMenuOpen(false)}

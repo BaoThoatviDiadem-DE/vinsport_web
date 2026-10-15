@@ -1,0 +1,7 @@
+pandas
+pyodbc
+sqlalchemy
+pyarrow
+boto3
+python-dotenv
+s3fs

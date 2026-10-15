@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Search, Filter } from "lucide-react";
+import { Search, Filter, RefreshCw } from "lucide-react";
 import api from "../api/api";
 
 type PaymentMethod = "cod" | "banking" | "momo" | string;
@@ -317,6 +317,17 @@ export default function AdminOrders() {
                 className="px-4 py-3 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 whitespace-nowrap"
               >
                 Xóa lọc
+              </button>
+
+              <button
+                type="button"
+                onClick={loadOrders}
+                disabled={isLoading}
+                className="px-4 py-3 rounded-xl bg-orange-50 text-orange-600 hover:bg-orange-100 font-bold flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-50 transition-colors"
+                title="Làm mới danh sách đơn hàng"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+                Làm mới
               </button>
             </div>
           </div>

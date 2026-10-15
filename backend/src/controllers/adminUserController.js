@@ -1,4 +1,5 @@
 const { sql, poolPromise } = require("../db");
+const { uploadUserToS3 } = require("../utils/s3Service");
 
 const getAdminUsers = async (req, res) => {
   try {
@@ -124,6 +125,9 @@ const updateAdminUser = async (req, res) => {
           role = @role
         WHERE user_id = @userId
       `);
+
+    // Gửi lên S3
+    uploadUserToS3(userId).catch(console.error);
 
     return res.json({
       message: "Cập nhật người dùng thành công",

@@ -238,10 +238,10 @@ export const Checkout = () => {
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
-              onClick={() => navigate("/tracking", { state: { orderId } })}
-              className="py-3 px-8 border-2 border-slate-200 rounded-xl font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+              onClick={() => navigate(`/tracking?id=${orderId}`)}
+              className="py-3 px-8 bg-orange-600 text-white rounded-xl font-bold hover:bg-orange-700 shadow-md transition-all flex items-center justify-center gap-2"
             >
-              Theo dõi đơn hàng
+              Xem & theo dõi đơn hàng #{orderId}
             </button>
             <button
               onClick={() => navigate("/")}

@@ -1,4 +1,5 @@
 const { sql, poolPromise } = require("../db");
+const { uploadProductToS3, deleteFromS3 } = require("../utils/s3Service");
 
 function normalizeSizes(sizes) {
   if (Array.isArray(sizes)) {
@@ -193,6 +194,8 @@ const createAdminProduct = async (req, res) => {
 
     await transaction.commit();
 
+    uploadProductToS3(productId).catch(console.error);
+
     return res.status(201).json({
       message: "Thêm sản phẩm thành công",
       id: productId,
@@ -314,6 +317,8 @@ const updateAdminProduct = async (req, res) => {
 
     await transaction.commit();
 
+    uploadProductToS3(productId).catch(console.error);
+
     return res.json({ message: "Cập nhật sản phẩm thành công" });
   } catch (error) {
     if (started) {
@@ -348,6 +353,8 @@ const deleteAdminProduct = async (req, res) => {
     if (result.rowsAffected[0] === 0) {
       return res.status(404).json({ message: "Không tìm thấy sản phẩm" });
     }
+
+    deleteFromS3("product", productId).catch(console.error);
 
     return res.json({ message: "Xóa sản phẩm thành công" });
   } catch (error) {
