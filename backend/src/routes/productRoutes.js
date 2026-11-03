@@ -21,6 +21,7 @@ router.get("/", async (req, res) => {
           b.name AS brand_name,
           c.name AS category_name,
           ISNULL(MIN(pv.price), 0) AS price,
+          ISNULL(SUM(pv.stock), 0) AS total_stock,
           (
             SELECT TOP 1 pi.image_url
             FROM ProductImages pi
@@ -46,6 +47,77 @@ router.get("/", async (req, res) => {
         ORDER BY p.product_id DESC
       `);
 
+    // Lấy thông tin tất cả màu sắc cho từng sản phẩm
+    const colorsResult = await pool.request().query(`
+      SELECT DISTINCT 
+        pv.product_id,
+        c.name AS color_name,
+        c.hex_code
+      FROM ProductVariants pv
+      INNER JOIN Colors c ON pv.color_id = c.color_id
+      ORDER BY pv.product_id, c.name
+    `);
+
+    const colorsByProduct = {};
+    for (const c of colorsResult.recordset) {
+      if (!colorsByProduct[c.product_id]) {
+        colorsByProduct[c.product_id] = [];
+      }
+      colorsByProduct[c.product_id].push({
+        name: c.color_name,
+        hex: c.hex_code || "#000000",
+      });
+    }
+
+    // Lấy thông tin tất cả kích cỡ cho từng sản phẩm
+    const sizesResult = await pool.request().query(`
+      SELECT DISTINCT 
+        pv.product_id,
+        s.name AS size_name
+      FROM ProductVariants pv
+      INNER JOIN Sizes s ON pv.size_id = s.size_id
+      ORDER BY pv.product_id, s.name
+    `);
+
+    const sizesByProduct = {};
+    for (const s of sizesResult.recordset) {
+      if (!sizesByProduct[s.product_id]) {
+        sizesByProduct[s.product_id] = [];
+      }
+      sizesByProduct[s.product_id].push(s.size_name);
+    }
+
+    // Lấy chi tiết từng biến thể (color, size, price, stock)
+    const variantsResult = await pool.request().query(`
+      SELECT
+        pv.variant_id,
+        pv.product_id,
+        s.name AS size,
+        c.name AS color,
+        c.hex_code,
+        pv.price,
+        pv.stock
+      FROM ProductVariants pv
+      INNER JOIN Sizes s ON pv.size_id = s.size_id
+      INNER JOIN Colors c ON pv.color_id = c.color_id
+      ORDER BY pv.variant_id
+    `);
+
+    const variantsByProduct = {};
+    for (const v of variantsResult.recordset) {
+      if (!variantsByProduct[v.product_id]) {
+        variantsByProduct[v.product_id] = [];
+      }
+      variantsByProduct[v.product_id].push({
+        variantId: v.variant_id,
+        size: v.size,
+        color: v.color,
+        hex: v.hex_code || "#000000",
+        price: Number(v.price) || 0,
+        stock: Number(v.stock) || 0,
+      });
+    }
+
     const products = result.recordset.map((row) => ({
       id: String(row.product_id),
       name: row.name || "",
@@ -53,7 +125,11 @@ router.get("/", async (req, res) => {
       category: row.category_name || "",
       brand: row.brand_name || "",
       price: Number(row.price) || 0,
+      stock: Number(row.total_stock) || 0,
       image: row.image_url || "",
+      colors: colorsByProduct[row.product_id] || [],
+      sizes: sizesByProduct[row.product_id] || [],
+      variants: variantsByProduct[row.product_id] || [],
       isNew: false,
     }));
 
@@ -89,7 +165,8 @@ router.get("/:id", async (req, res) => {
           p.description,
           b.name AS brand_name,
           c.name AS category_name,
-          ISNULL(MIN(pv.price), 0) AS price
+          ISNULL(MIN(pv.price), 0) AS price,
+          ISNULL(SUM(pv.stock), 0) AS total_stock
         FROM Products p
         LEFT JOIN Brands b ON p.brand_id = b.brand_id
         LEFT JOIN Categories c ON p.category_id = c.category_id
@@ -183,6 +260,7 @@ router.get("/:id", async (req, res) => {
       category: row.category_name || "",
       brand: row.brand_name || "",
       price: Number(row.price) || 0,
+      stock: Number(row.total_stock) || 0,
       image: images[0] || "",
       images,
       sizes,

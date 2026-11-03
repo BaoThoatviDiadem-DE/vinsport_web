@@ -83,9 +83,9 @@ export default function AdminUsers() {
       prev.map((u) =>
         u.id === id
           ? {
-              ...u,
-              [field]: field === "role" ? (value as "admin" | "user") : value,
-            }
+            ...u,
+            [field]: field === "role" ? (value as "admin" | "user") : value,
+          }
           : u
       )
     );
@@ -132,9 +132,6 @@ export default function AdminUsers() {
     <div className="max-w-7xl mx-auto p-6 space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-slate-900">Quản lý người dùng</h1>
-        <p className="text-slate-600 mt-2">
-          Admin có thể tìm kiếm theo email và chỉnh sửa trực tiếp thông tin tài khoản.
-        </p>
       </div>
 
       <form
@@ -172,11 +169,10 @@ export default function AdminUsers() {
           <button
             type="button"
             onClick={() => setRoleFilter("all")}
-            className={`px-3 py-1 rounded-full text-sm font-semibold transition ${
-              roleFilter === "all"
+            className={`px-3 py-1 rounded-full text-sm font-semibold transition ${roleFilter === "all"
                 ? "bg-orange-500 text-white"
                 : "bg-orange-100 text-orange-700 hover:bg-orange-200"
-            }`}
+              }`}
           >
             Tổng số: {users.length}
           </button>
@@ -184,11 +180,10 @@ export default function AdminUsers() {
           <button
             type="button"
             onClick={() => handleRoleFilterClick("admin")}
-            className={`px-3 py-1 rounded-full text-sm font-semibold transition ${
-              roleFilter === "admin"
+            className={`px-3 py-1 rounded-full text-sm font-semibold transition ${roleFilter === "admin"
                 ? "bg-red-500 text-white"
                 : "bg-red-100 text-red-700 hover:bg-red-200"
-            }`}
+              }`}
           >
             Admin: {adminCount}
           </button>
@@ -196,11 +191,10 @@ export default function AdminUsers() {
           <button
             type="button"
             onClick={() => handleRoleFilterClick("user")}
-            className={`px-3 py-1 rounded-full text-sm font-semibold transition ${
-              roleFilter === "user"
+            className={`px-3 py-1 rounded-full text-sm font-semibold transition ${roleFilter === "user"
                 ? "bg-blue-500 text-white"
                 : "bg-blue-100 text-blue-700 hover:bg-blue-200"
-            }`}
+              }`}
           >
             User: {userCount}
           </button>

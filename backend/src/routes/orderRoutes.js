@@ -99,9 +99,11 @@ router.post("/orders", async (req, res) => {
           .input("phone", sql.NVarChar, phone)
           .input("address", sql.NVarChar, address)
           .query(`
+            DECLARE @tempUser TABLE (user_id INT);
             INSERT INTO Users (name, email, password, phone, address)
-            OUTPUT INSERTED.user_id
-            VALUES (@name, @email, @password, @phone, @address)
+            OUTPUT INSERTED.user_id INTO @tempUser
+            VALUES (@name, @email, @password, @phone, @address);
+            SELECT user_id FROM @tempUser;
           `);
 
         userId = insertUser.recordset[0].user_id;
@@ -115,9 +117,11 @@ router.post("/orders", async (req, res) => {
       .input("status", sql.NVarChar, "Pending")
       .input("totalAmount", sql.Decimal(12, 2), Number(totalAmount) || 0)
       .query(`
+        DECLARE @tempOrder TABLE (order_id INT, order_date DATETIME, status NVARCHAR(50), total_amount DECIMAL(12, 2));
         INSERT INTO Orders (user_id, order_date, status, total_amount)
-        OUTPUT INSERTED.order_id, INSERTED.order_date, INSERTED.status, INSERTED.total_amount
-        VALUES (@userId, @orderDate, @status, @totalAmount)
+        OUTPUT INSERTED.order_id, INSERTED.order_date, INSERTED.status, INSERTED.total_amount INTO @tempOrder
+        VALUES (@userId, @orderDate, @status, @totalAmount);
+        SELECT * FROM @tempOrder;
       `);
 
     const createdOrder = orderInsert.recordset[0];
@@ -157,26 +161,101 @@ router.post("/orders", async (req, res) => {
 
       let variantResult;
 
-      if (sizeName && colorName) {
+      // 1. Tìm chính xác theo variantId nếu client truyền lên
+      if (item.variantId) {
+        variantResult = await new sql.Request(transaction)
+          .input("productId", sql.Int, productId)
+          .input("variantId", sql.Int, Number(item.variantId))
+          .query(`
+            SELECT TOP 1 pv.variant_id, pv.stock, pv.price, s.name as size_name, c.name as color_name
+            FROM ProductVariants pv
+            INNER JOIN Sizes s ON pv.size_id = s.size_id
+            INNER JOIN Colors c ON pv.color_id = c.color_id
+            WHERE pv.product_id = @productId
+              AND pv.variant_id = @variantId
+          `);
+      }
+
+      // 2. Tìm chính xác theo CẢ size và màu sắc (không phân biệt hoa thường, khoảng trắng)
+      if ((!variantResult || variantResult.recordset.length === 0) && sizeName && colorName) {
         variantResult = await new sql.Request(transaction)
           .input("productId", sql.Int, productId)
           .input("sizeName", sql.NVarChar, sizeName)
           .input("colorName", sql.NVarChar, colorName)
           .query(`
-            SELECT TOP 1 pv.variant_id, pv.stock, pv.price
+            SELECT TOP 1 pv.variant_id, pv.stock, pv.price, s.name as size_name, c.name as color_name
             FROM ProductVariants pv
             INNER JOIN Sizes s ON pv.size_id = s.size_id
             INNER JOIN Colors c ON pv.color_id = c.color_id
             WHERE pv.product_id = @productId
-              AND s.name = @sizeName
-              AND c.name = @colorName
+              AND LOWER(LTRIM(RTRIM(s.name))) = LOWER(LTRIM(RTRIM(@sizeName)))
+              AND LOWER(LTRIM(RTRIM(c.name))) = LOWER(LTRIM(RTRIM(@colorName)))
           `);
-      } else {
+      }
+
+      // 3. Nếu sản phẩm chưa có biến thể khớp đúng size và màu đã chọn:
+      // Tạo đúng biến thể cho size và màu đó thay vì trừ nhầm sang size hoặc màu khác!
+      if ((!variantResult || variantResult.recordset.length === 0) && sizeName && colorName) {
+        let sizeCheck = await new sql.Request(transaction)
+          .input("sizeName", sql.NVarChar, sizeName)
+          .query(`SELECT TOP 1 size_id FROM Sizes WHERE LOWER(LTRIM(RTRIM(name))) = LOWER(LTRIM(RTRIM(@sizeName)))`);
+
+        let targetSizeId;
+        if (sizeCheck.recordset.length > 0) {
+          targetSizeId = sizeCheck.recordset[0].size_id;
+        } else {
+          const insertSize = await new sql.Request(transaction)
+            .input("sizeName", sql.NVarChar, sizeName)
+            .query(`INSERT INTO Sizes (name) OUTPUT INSERTED.size_id VALUES (@sizeName)`);
+          targetSizeId = insertSize.recordset[0].size_id;
+        }
+
+        let colorCheck = await new sql.Request(transaction)
+          .input("colorName", sql.NVarChar, colorName)
+          .query(`SELECT TOP 1 color_id FROM Colors WHERE LOWER(LTRIM(RTRIM(name))) = LOWER(LTRIM(RTRIM(@colorName)))`);
+
+        let targetColorId;
+        if (colorCheck.recordset.length > 0) {
+          targetColorId = colorCheck.recordset[0].color_id;
+        } else {
+          const insertColor = await new sql.Request(transaction)
+            .input("colorName", sql.NVarChar, colorName)
+            .query(`INSERT INTO Colors (name) OUTPUT INSERTED.color_id VALUES (@colorName)`);
+          targetColorId = insertColor.recordset[0].color_id;
+        }
+
+        const insertVar = await new sql.Request(transaction)
+          .input("productId", sql.Int, productId)
+          .input("sizeId", sql.Int, targetSizeId)
+          .input("colorId", sql.Int, targetColorId)
+          .input("price", sql.Decimal(10, 2), price)
+          .input("initialStock", sql.Int, Math.max(quantity, 20))
+          .query(`
+            INSERT INTO ProductVariants (product_id, size_id, color_id, price, stock)
+            OUTPUT INSERTED.variant_id, INSERTED.stock, INSERTED.price
+            VALUES (@productId, @sizeId, @colorId, @price, @initialStock)
+          `);
+
+        variantResult = {
+          recordset: [{
+            variant_id: insertVar.recordset[0].variant_id,
+            stock: insertVar.recordset[0].stock,
+            price: insertVar.recordset[0].price,
+            size_name: sizeName,
+            color_name: colorName,
+          }]
+        };
+      }
+
+      // 4. Nếu không có size hoặc color chỉ định (sản phẩm đơn), lấy biến thể đầu tiên
+      if (!variantResult || variantResult.recordset.length === 0) {
         variantResult = await new sql.Request(transaction)
           .input("productId", sql.Int, productId)
           .query(`
-            SELECT TOP 1 pv.variant_id, pv.stock, pv.price
+            SELECT TOP 1 pv.variant_id, pv.stock, pv.price, s.name as size_name, c.name as color_name
             FROM ProductVariants pv
+            INNER JOIN Sizes s ON pv.size_id = s.size_id
+            INNER JOIN Colors c ON pv.color_id = c.color_id
             WHERE pv.product_id = @productId
             ORDER BY pv.variant_id
           `);
@@ -189,9 +268,10 @@ router.post("/orders", async (req, res) => {
       const variant = variantResult.recordset[0];
 
       if (Number(variant.stock) < quantity) {
-        throw new Error(`Sản phẩm ID ${productId} không đủ số lượng tồn kho`);
+        throw new Error(`Sản phẩm "${item.name || productId}" (Màu: ${variant.color_name || colorName}, Size: ${variant.size_name || sizeName}) chỉ còn ${variant.stock} sản phẩm trong kho!`);
       }
 
+      // Insert chi tiết đơn hàng (Trigger trg_UpdateStock trong CSDL sẽ tự động trừ stock)
       await new sql.Request(transaction)
         .input("orderId", sql.Int, orderId)
         .input("variantId", sql.Int, variant.variant_id)
@@ -202,14 +282,25 @@ router.post("/orders", async (req, res) => {
           VALUES (@orderId, @variantId, @quantity, @price)
         `);
 
-      await new sql.Request(transaction)
-        .input("variantId", sql.Int, variant.variant_id)
-        .input("quantity", sql.Int, quantity)
-        .query(`
-          UPDATE ProductVariants
-          SET stock = stock - @quantity
-          WHERE variant_id = @variantId
-        `);
+      // Kiểm tra xem database có trigger trg_UpdateStock tự động trừ tồn kho không
+      const triggerCheck = await new sql.Request(transaction).query(`
+        SELECT is_disabled 
+        FROM sys.triggers 
+        WHERE name = 'trg_UpdateStock' AND parent_id = OBJECT_ID('OrderDetails')
+      `);
+      const hasActiveTrigger = triggerCheck.recordset.length > 0 && !triggerCheck.recordset[0].is_disabled;
+
+      // Nếu KHÔNG có trigger tự động, ta mới chủ động trừ stock để đảm bảo không bị trừ lặp 2 lần
+      if (!hasActiveTrigger) {
+        await new sql.Request(transaction)
+          .input("variantId", sql.Int, variant.variant_id)
+          .input("quantity", sql.Int, quantity)
+          .query(`
+            UPDATE ProductVariants
+            SET stock = stock - @quantity
+            WHERE variant_id = @variantId
+          `);
+      }
     }
 
     await transaction.commit();
@@ -599,16 +690,28 @@ router.put("/orders/:id/cancel", verifyToken, async (req, res) => {
         WHERE order_id = @orderId
       `);
 
-    // 3. Hoàn tồn kho
-    await new sql.Request(transaction)
-      .input("orderId", sql.Int, orderId)
-      .query(`
-        UPDATE pv
-        SET pv.stock = pv.stock + od.quantity
-        FROM ProductVariants pv
-        INNER JOIN OrderDetails od ON pv.variant_id = od.variant_id
-        WHERE od.order_id = @orderId
-      `);
+    // 3. Kiểm tra xem database có trigger trg_RestoreStock_OnCancel tự động hoàn kho không
+    const triggerCancelCheck = await new sql.Request(transaction).query(`
+      SELECT is_disabled 
+      FROM sys.triggers 
+      WHERE name = 'trg_RestoreStock_OnCancel' AND parent_id = OBJECT_ID('Orders')
+    `);
+    const hasActiveCancelTrigger =
+      triggerCancelCheck.recordset.length > 0 &&
+      !triggerCancelCheck.recordset[0].is_disabled;
+
+    // Chỉ hoàn tồn kho bằng code nếu CSDL KHÔNG có trigger tự động hoàn (tránh bị cộng lặp 2 lần)
+    if (!hasActiveCancelTrigger) {
+      await new sql.Request(transaction)
+        .input("orderId", sql.Int, orderId)
+        .query(`
+          UPDATE pv
+          SET pv.stock = pv.stock + od.quantity
+          FROM ProductVariants pv
+          INNER JOIN OrderDetails od ON pv.variant_id = od.variant_id
+          WHERE od.order_id = @orderId
+        `);
+    }
 
     await transaction.commit();
 

@@ -1,17 +1,20 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router";
 import {
-  ShoppingCart,
-  User,
-  Search,
-  Menu,
-  X,
-  Package,
-  LogOut,
+  Home,
+  ShoppingBag,
+  Truck,
+  BarChart3,
   ShieldCheck,
   Users,
   ClipboardList,
-  BarChart3,
+  ShoppingCart,
+  User,
+  LogOut,
+  Package,
+  Search,
+  Menu,
+  X,
 } from "lucide-react";
 import { useCart } from "../contexts/CartContext";
 import { useAuth } from "../contexts/AuthContext";
@@ -19,290 +22,372 @@ import { useAuth } from "../contexts/AuthContext";
 export const Navbar = () => {
   const { totalItems } = useCart();
   const { isAuthenticated, user, logout } = useAuth();
-  const [isMenuOpen, setIsMenuOpen] = React.useState(false);
-  const [searchQuery, setSearchQuery] = React.useState("");
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      navigate(`/products?search=${encodeURIComponent(searchQuery)}`);
-      setIsMenuOpen(false);
+      navigate(`/products?search=${encodeURIComponent(searchQuery.trim())}`);
+      setIsMobileOpen(false);
     }
   };
 
-  const navLinks = [
-    { name: "Trang chủ", path: "/" },
-    { name: "Sản phẩm", path: "/products" },
-    { name: "Đơn hàng của tôi", path: "/tracking" },
+  const handleLogout = () => {
+    logout();
+    setIsMobileOpen(false);
+    navigate("/");
+  };
+
+  const isActive = (path: string, exact: boolean = false) => {
+    if (exact || path === "/") {
+      return location.pathname === "/" && (!location.search || location.search === "");
+    }
+    return location.pathname.startsWith(path);
+  };
+
+  // 1. Nhóm chức năng chính (Trang chủ, Sản phẩm, Đơn hàng của tôi)
+  const mainLinks = [
+    {
+      name: "Trang chủ",
+      path: "/",
+      icon: Home,
+      exact: true,
+    },
+    {
+      name: "Sản phẩm",
+      path: "/products",
+      icon: ShoppingBag,
+    },
+    {
+      name: "Đơn hàng của tôi",
+      path: "/tracking",
+      icon: Truck,
+    },
+  ];
+
+  // 2. Nhóm quản trị (Thống kê & Báo cáo, Sản phẩm, Người dùng, Đơn hàng)
+  const adminLinks = [
+    {
+      name: "Thống kê & Báo cáo",
+      path: "/admin/analytics",
+      icon: BarChart3,
+    },
+    {
+      name: "Sản phẩm",
+      path: "/admin/products",
+      icon: ShieldCheck,
+    },
+    {
+      name: "Người dùng",
+      path: "/admin/users",
+      icon: Users,
+    },
+    {
+      name: "Đơn hàng",
+      path: "/admin/orders",
+      icon: ClipboardList,
+    },
   ];
 
   return (
-    <header className="bg-white border-b sticky top-0 z-50">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-        <Link
-          to="/"
-          className="flex items-center gap-2 text-2xl font-black text-orange-600 tracking-tighter italic"
-        >
-          <Package className="w-8 h-8" />
-          VinSport
-        </Link>
+    <>
+      {/* CSS đảm bảo khu vực main & footer luôn lùi sang phải 16rem (256px) trên màn hình máy tính */}
+      <style>{`
+        @media (min-width: 768px) {
+          main {
+            margin-left: 16rem !important;
+          }
+          footer {
+            margin-left: 16rem !important;
+          }
+        }
+      `}</style>
 
-        <nav className="hidden md:flex items-center gap-8 font-medium">
-          {navLinks.map((link) => (
-            <Link
-              key={link.path}
-              to={link.path}
-              className={`hover:text-orange-600 transition-colors ${
-                location.pathname === link.path ? "text-orange-600" : "text-slate-700"
-              }`}
-            >
-              {link.name}
-            </Link>
-          ))}
+      {/* Lớp nền mờ khi mở menu trên điện thoại */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 md:hidden transition-opacity"
+          onClick={() => setIsMobileOpen(false)}
+          aria-hidden="true"
+        />
+      )}
 
-          {user?.role === "admin" && (
-            <>
+      {/* =========================================================================
+          THANH ĐIỀU HƯỚNG DỌC Ở BÊN TRÁI (SIDEBAR)
+         ========================================================================= */}
+      <aside
+        className={`fixed top-0 left-0 z-50 md:z-40 h-screen w-64 bg-white border-r border-slate-100 flex flex-col transition-transform duration-300 ease-in-out select-none ${
+          isMobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full md:translate-x-0"
+        }`}
+      >
+        {/* Logo VinSport */}
+        <div className="h-16 px-5 border-b border-slate-100 flex items-center justify-between shrink-0">
+          <Link
+            to="/"
+            onClick={() => setIsMobileOpen(false)}
+            className="flex items-center gap-2.5 group"
+          >
+            <div className="w-9 h-9 rounded-xl bg-orange-600 flex items-center justify-center text-white shadow-sm shadow-orange-500/30 group-hover:scale-105 transition-transform">
+              <Package className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-xl font-black italic tracking-tighter text-slate-900">
+                Vin<span className="text-orange-600">Sport</span>
+              </span>
+              <p className="text-[10px] text-slate-400 font-medium -mt-1 tracking-wide">
+                Hệ thống thể thao
+              </p>
+            </div>
+          </Link>
+
+          {/* Nút đóng trên mobile */}
+          <button
+            onClick={() => setIsMobileOpen(false)}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 md:hidden"
+            aria-label="Đóng menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Danh sách các tính năng dọc */}
+        <div className="flex-1 overflow-y-auto px-3.5 py-4 space-y-5 scrollbar-thin scrollbar-thumb-slate-200">
+          {/* Nhóm chức năng chính */}
+          <div className="space-y-1">
+            <div className="px-3.5 pt-1 pb-1.5 text-[13px] font-medium text-[#8c9ba5]">
+              Chính
+            </div>
+
+            <div className="space-y-1">
+              {mainLinks.map((item) => {
+                const active = isActive(item.path, item.exact);
+                const Icon = item.icon;
+
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setIsMobileOpen(false)}
+                    className={`group flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-[15px] transition-all duration-150 ${
+                      active
+                        ? "bg-[#fff1ed] text-orange-600 font-semibold"
+                        : "text-[#333e48] hover:bg-slate-50 hover:text-slate-900 font-normal"
+                    }`}
+                  >
+                    <Icon
+                      className={`w-5 h-5 shrink-0 transition-colors stroke-[1.75] ${
+                        active
+                          ? "text-orange-600"
+                          : "text-[#4b5563] group-hover:text-slate-800"
+                      }`}
+                    />
+                    <span className="truncate">{item.name}</span>
+                  </Link>
+                );
+              })}
+
+              {/* Giỏ hàng */}
               <Link
-                to="/admin/analytics"
-                className={`hover:text-orange-600 transition-colors flex items-center gap-1.5 ${
-                  location.pathname.startsWith("/admin/analytics")
-                    ? "text-orange-600 font-bold"
-                    : "text-slate-700"
+                to="/cart"
+                onClick={() => setIsMobileOpen(false)}
+                className={`group flex items-center justify-between px-3.5 py-2.5 rounded-xl text-[15px] transition-all duration-150 ${
+                  isActive("/cart")
+                    ? "bg-[#fff1ed] text-orange-600 font-semibold"
+                    : "text-[#333e48] hover:bg-slate-50 hover:text-slate-900 font-normal"
                 }`}
               >
-                <BarChart3 className="w-4 h-4 text-orange-500" />
-                Thống kê & Báo cáo
-              </Link>
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <ShoppingCart
+                    className={`w-5 h-5 shrink-0 transition-colors stroke-[1.75] ${
+                      isActive("/cart")
+                        ? "text-orange-600"
+                        : "text-[#4b5563] group-hover:text-slate-800"
+                    }`}
+                  />
+                  <span className="truncate">Giỏ hàng</span>
+                </div>
 
-              <Link
-                to="/admin/products"
-                className={`hover:text-orange-600 transition-colors flex items-center gap-1.5 ${
-                  location.pathname.startsWith("/admin/products")
-                    ? "text-orange-600 font-bold"
-                    : "text-slate-700"
-                }`}
-              >
-                <ShieldCheck className="w-4 h-4" />
-                Sản phẩm
+                {totalItems > 0 && (
+                  <span className="shrink-0 px-2 py-0.5 text-[11px] font-bold rounded-full bg-orange-600 text-white min-w-5 text-center">
+                    {totalItems}
+                  </span>
+                )}
               </Link>
+            </div>
+          </div>
 
-              <Link
-                to="/admin/users"
-                className={`hover:text-orange-600 transition-colors flex items-center gap-1.5 ${
-                  location.pathname.startsWith("/admin/users")
-                    ? "text-orange-600 font-bold"
-                    : "text-slate-700"
-                }`}
-              >
-                <Users className="w-4 h-4" />
-                Người dùng
-              </Link>
+          {/* Nhóm Quản trị (CHỈ hiển thị khi đã đăng nhập với vai trò Admin) */}
+          {isAuthenticated && user?.role === "admin" && (
+            <div className="space-y-1">
+              <div className="px-3.5 pt-1 pb-1.5 text-[13px] font-medium text-[#8c9ba5] flex items-center justify-between">
+                <span>Quản trị</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-bold">
+                  Admin
+                </span>
+              </div>
 
-              <Link
-                to="/admin/orders"
-                className={`hover:text-orange-600 transition-colors flex items-center gap-1.5 ${
-                  location.pathname.startsWith("/admin/orders")
-                    ? "text-orange-600 font-bold"
-                    : "text-slate-700"
-                }`}
-              >
-                <ClipboardList className="w-4 h-4" />
-                Đơn hàng
-              </Link>
-            </>
+              <div className="space-y-1">
+                {adminLinks.map((item) => {
+                  const active = isActive(item.path);
+                  const Icon = item.icon;
+
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setIsMobileOpen(false)}
+                      className={`group flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-[15px] transition-all duration-150 ${
+                        active
+                          ? "bg-[#fff1ed] text-orange-600 font-semibold"
+                          : "text-[#333e48] hover:bg-slate-50 hover:text-slate-900 font-normal"
+                      }`}
+                    >
+                      <Icon
+                        className={`w-5 h-5 shrink-0 transition-colors stroke-[1.75] ${
+                          active
+                            ? "text-orange-600"
+                            : "text-[#4b5563] group-hover:text-slate-800"
+                        }`}
+                      />
+                      <span className="truncate">{item.name}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
           )}
-        </nav>
+        </div>
 
-        <div className="hidden md:flex items-center gap-4">
+        {/* Khối tài khoản người dùng ở góc dưới */}
+        <div className="p-3 border-t border-slate-100 bg-slate-50/50 shrink-0">
+          {isAuthenticated ? (
+            <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white border border-slate-100 shadow-2xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-sm shrink-0">
+                  {user?.name ? user.name.charAt(0).toUpperCase() : "U"}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-800 truncate">
+                    {user?.name}
+                  </p>
+                  <p className="text-[10px] text-slate-400 capitalize truncate">
+                    {user?.role === "admin" ? "Quản trị viên" : "Khách hàng"}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={handleLogout}
+                title="Đăng xuất"
+                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <Link
+              to="/login"
+              onClick={() => setIsMobileOpen(false)}
+              className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors shadow-2xs"
+            >
+              <User className="w-4 h-4 text-orange-600" />
+              <span>Đăng nhập tài khoản</span>
+            </Link>
+          )}
+        </div>
+      </aside>
+
+      {/* =========================================================================
+          THANH HEADER TRÊN CÙNG CỦA KHU VỰC NỘI DUNG (TOPBAR)
+         ========================================================================= */}
+      <header className="sticky top-0 z-30 h-16 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 md:px-8 flex items-center justify-between gap-4 md:ml-64">
+        {/* Nút bật menu & Logo trên Mobile */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsMobileOpen((prev) => !prev)}
+            className="p-2 -ml-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl md:hidden transition-colors"
+            aria-label="Mở menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+
+          <Link
+            to="/"
+            className="flex items-center gap-2 text-xl font-black italic tracking-tighter text-slate-900 md:hidden"
+          >
+            <Package className="w-6 h-6 text-orange-600" />
+            <span>
+              Vin<span className="text-orange-600">Sport</span>
+            </span>
+          </Link>
+        </div>
+
+        {/* Thanh tìm kiếm sản phẩm */}
+        <div className="flex-1 max-w-lg hidden sm:block">
           <form onSubmit={handleSearch} className="relative">
             <input
               type="text"
               placeholder="Tìm kiếm sản phẩm..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 pr-4 py-2 border rounded-full bg-slate-50 focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm w-64"
+              className="w-full pl-10 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-full focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all placeholder:text-slate-400"
             />
-            <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </form>
+        </div>
 
-          <Link to="/cart" className="relative p-2 text-slate-700 hover:text-orange-600">
-            <ShoppingCart className="w-6 h-6" />
+        {/* Giỏ hàng nhanh & Trạng thái tài khoản */}
+        <div className="flex items-center gap-2.5 sm:gap-4">
+          <Link
+            to="/cart"
+            className="relative p-2.5 text-slate-700 hover:text-orange-600 hover:bg-slate-50 rounded-xl transition-all"
+            title="Giỏ hàng"
+          >
+            <ShoppingCart className="w-5 h-5" />
             {totalItems > 0 && (
-              <span className="absolute top-0 right-0 bg-orange-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full">
+              <span className="absolute top-1 right-1 bg-orange-600 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full ring-2 ring-white">
                 {totalItems}
               </span>
             )}
           </Link>
 
+          <div className="h-5 w-px bg-slate-200 hidden sm:block" />
+
           {isAuthenticated ? (
-            <div className="flex items-center gap-4 border-l pl-4 ml-2 border-slate-200">
-              <div className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                <User className="w-4 h-4 text-orange-600" />
-                <span>Chào, {user?.name}</span>
+            <div className="flex items-center gap-3">
+              <div className="hidden lg:flex items-center gap-2 text-sm">
+                <span className="text-slate-500">Chào,</span>
+                <span className="font-semibold text-slate-800">{user?.name}</span>
                 {user?.role === "admin" && (
-                  <span className="px-2 py-1 rounded-full text-xs bg-orange-100 text-orange-700">
+                  <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-orange-100 text-orange-700 border border-orange-200">
                     Admin
                   </span>
                 )}
               </div>
 
               <button
-                onClick={logout}
-                className="text-sm text-slate-500 hover:text-red-600 flex items-center gap-1 font-medium transition-colors"
+                onClick={handleLogout}
+                title="Đăng xuất"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-red-600 hover:bg-red-50 border border-slate-200 hover:border-red-200 transition-all"
               >
-                <LogOut className="w-4 h-4" /> Đăng xuất
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Đăng xuất</span>
               </button>
             </div>
           ) : (
             <Link
               to="/login"
-              className="flex items-center gap-2 p-2 text-slate-700 hover:text-orange-600 font-medium"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded-full shadow-xs transition-colors"
             >
-              <User className="w-6 h-6" />
-              <span className="text-sm">Đăng nhập</span>
+              <User className="w-4 h-4" />
+              <span>Đăng nhập</span>
             </Link>
           )}
         </div>
-
-        <div className="flex md:hidden items-center gap-4">
-          <Link to="/cart" className="relative p-2 text-slate-700">
-            <ShoppingCart className="w-6 h-6" />
-            {totalItems > 0 && (
-              <span className="absolute top-0 right-0 bg-orange-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full">
-                {totalItems}
-              </span>
-            )}
-          </Link>
-
-          <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2">
-            {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
-        </div>
-      </div>
-
-      {isMenuOpen && (
-        <div className="md:hidden border-t bg-white px-4 py-4 space-y-4">
-          <form onSubmit={handleSearch} className="relative mb-4">
-            <input
-              type="text"
-              placeholder="Tìm kiếm sản phẩm..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 pr-4 py-3 border rounded-lg bg-slate-50 w-full focus:outline-none focus:ring-2 focus:ring-orange-500"
-            />
-            <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
-          </form>
-
-          <nav className="flex flex-col gap-4 font-medium">
-            {navLinks.map((link) => (
-              <Link
-                key={link.path}
-                to={link.path}
-                onClick={() => setIsMenuOpen(false)}
-                className={`text-lg ${
-                  location.pathname === link.path ? "text-orange-600" : "text-slate-700"
-                }`}
-              >
-                {link.name}
-              </Link>
-            ))}
-
-            {user?.role === "admin" && (
-              <>
-                <Link
-                  to="/admin/analytics"
-                  onClick={() => setIsMenuOpen(false)}
-                  className={`text-lg flex items-center gap-2 ${
-                    location.pathname.startsWith("/admin/analytics")
-                      ? "text-orange-600 font-bold"
-                      : "text-slate-700"
-                  }`}
-                >
-                  <BarChart3 className="w-5 h-5 text-orange-500" />
-                  Thống kê & Báo cáo
-                </Link>
-
-                <Link
-                  to="/admin/products"
-                  onClick={() => setIsMenuOpen(false)}
-                  className={`text-lg flex items-center gap-2 ${
-                    location.pathname.startsWith("/admin/products")
-                      ? "text-orange-600"
-                      : "text-slate-700"
-                  }`}
-                >
-                  <ShieldCheck className="w-5 h-5" />
-                  Quản lý sản phẩm
-                </Link>
-
-                <Link
-                  to="/admin/users"
-                  onClick={() => setIsMenuOpen(false)}
-                  className={`text-lg flex items-center gap-2 ${
-                    location.pathname.startsWith("/admin/users")
-                      ? "text-orange-600"
-                      : "text-slate-700"
-                  }`}
-                >
-                  <Users className="w-5 h-5" />
-                  Quản lý người dùng
-                </Link>
-
-                <Link
-                  to="/admin/orders"
-                  onClick={() => setIsMenuOpen(false)}
-                  className={`text-lg flex items-center gap-2 ${
-                    location.pathname.startsWith("/admin/orders")
-                      ? "text-orange-600"
-                      : "text-slate-700"
-                  }`}
-                >
-                  <ClipboardList className="w-5 h-5" />
-                  Quản lý đơn hàng
-                </Link>
-              </>
-            )}
-
-            <div className="h-px bg-slate-100 my-2"></div>
-
-            {isAuthenticated ? (
-              <>
-                <div className="text-lg text-orange-600 flex items-center gap-2">
-                  <User className="w-5 h-5" />
-                  Chào, {user?.name}
-                  {user?.role === "admin" && (
-                    <span className="px-2 py-1 rounded-full text-xs bg-orange-100 text-orange-700">
-                      Admin
-                    </span>
-                  )}
-                </div>
-
-                <button
-                  onClick={() => {
-                    logout();
-                    setIsMenuOpen(false);
-                  }}
-                  className="text-lg text-slate-500 flex items-center gap-2 text-left"
-                >
-                  <LogOut className="w-5 h-5" />
-                  Đăng xuất
-                </button>
-              </>
-            ) : (
-              <Link
-                to="/login"
-                onClick={() => setIsMenuOpen(false)}
-                className="text-lg text-slate-700 flex items-center gap-2"
-              >
-                <User className="w-5 h-5" />
-                Đăng nhập / Đăng ký
-              </Link>
-            )}
-          </nav>
-        </div>
-      )}
-    </header>
+      </header>
+    </>
   );
 };

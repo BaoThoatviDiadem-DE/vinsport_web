@@ -273,9 +273,6 @@ export default function AdminOrders() {
     <div className="max-w-7xl mx-auto p-6 space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-slate-900">Quản lý đơn hàng</h1>
-        <p className="text-slate-600 mt-2">
-          Tìm kiếm theo từng tiêu chí và lọc nhanh theo trạng thái.
-        </p>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border p-5">
@@ -489,113 +486,113 @@ export default function AdminOrders() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1240px] border-collapse">
               <thead>
-  <tr className="bg-slate-100 text-left">
-    <th className="p-3 border-b min-w-[90px]">Mã đơn</th>
-    <th className="p-3 border-b min-w-[280px]">Khách hàng</th>
-    <th className="p-3 border-b min-w-[140px]">Tổng tiền</th>
-    <th className="p-3 border-b min-w-[150px]">Phương thức</th>
-    <th className="p-3 border-b min-w-[190px]">TT thanh toán</th>
-    <th className="p-3 border-b min-w-[190px]">TT đơn hàng</th>
-    <th className="p-3 border-b min-w-[130px]">Ngày tạo</th>
-    <th className="p-3 border-b min-w-[140px] sticky right-0 bg-slate-100 z-20 shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.08)]">
-      Thao tác
-    </th>
-  </tr>
-</thead>
+                <tr className="bg-slate-100 text-left">
+                  <th className="p-3 border-b min-w-[90px]">Mã đơn</th>
+                  <th className="p-3 border-b min-w-[280px]">Khách hàng</th>
+                  <th className="p-3 border-b min-w-[140px]">Tổng tiền</th>
+                  <th className="p-3 border-b min-w-[150px]">Phương thức</th>
+                  <th className="p-3 border-b min-w-[190px]">TT thanh toán</th>
+                  <th className="p-3 border-b min-w-[190px]">TT đơn hàng</th>
+                  <th className="p-3 border-b min-w-[130px]">Ngày tạo</th>
+                  <th className="p-3 border-b min-w-[140px] sticky right-0 bg-slate-100 z-20 shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.08)]">
+                    Thao tác
+                  </th>
+                </tr>
+              </thead>
 
-<tbody>
-  {filteredOrders.map((order) => (
-    <tr key={String(order.id)} className="hover:bg-slate-50 align-top">
-      <td className="p-3 border-b font-semibold whitespace-nowrap">
-        #{order.id}
-      </td>
+              <tbody>
+                {filteredOrders.map((order) => (
+                  <tr key={String(order.id)} className="hover:bg-slate-50 align-top">
+                    <td className="p-3 border-b font-semibold whitespace-nowrap">
+                      #{order.id}
+                    </td>
 
-      <td className="p-3 border-b">
-        <div className="font-medium text-slate-900">
-          {order.customerName}
-        </div>
-        <div className="text-sm text-slate-500 mt-1">
-          SĐT: {order.phone || "-"}
-        </div>
-        <div className="text-sm text-slate-500">
-          Địa chỉ: {order.address || "-"}
-        </div>
-      </td>
+                    <td className="p-3 border-b">
+                      <div className="font-medium text-slate-900">
+                        {order.customerName}
+                      </div>
+                      <div className="text-sm text-slate-500 mt-1">
+                        SĐT: {order.phone || "-"}
+                      </div>
+                      <div className="text-sm text-slate-500">
+                        Địa chỉ: {order.address || "-"}
+                      </div>
+                    </td>
 
-      <td className="p-3 border-b font-medium whitespace-nowrap">
-        {Number(order.totalAmount || 0).toLocaleString("vi-VN")} đ
-      </td>
+                    <td className="p-3 border-b font-medium whitespace-nowrap">
+                      {Number(order.totalAmount || 0).toLocaleString("vi-VN")} đ
+                    </td>
 
-      <td className="p-3 border-b whitespace-nowrap">
-        {formatPaymentMethod(order.paymentMethod)}
-      </td>
+                    <td className="p-3 border-b whitespace-nowrap">
+                      {formatPaymentMethod(order.paymentMethod)}
+                    </td>
 
-      <td className="p-3 border-b">
-        <div className="mb-2">
-          <span
-            className={`px-3 py-1 rounded-full text-sm font-semibold border ${paymentStatusClass(
-              order.paymentStatus
-            )}`}
-          >
-            {paymentStatusLabel(order.paymentStatus)}
-          </span>
-        </div>
+                    <td className="p-3 border-b">
+                      <div className="mb-2">
+                        <span
+                          className={`px-3 py-1 rounded-full text-sm font-semibold border ${paymentStatusClass(
+                            order.paymentStatus
+                          )}`}
+                        >
+                          {paymentStatusLabel(order.paymentStatus)}
+                        </span>
+                      </div>
 
-        <select
-          value={order.paymentStatus}
-          onChange={(e) =>
-            handleFieldChange(order.id, "paymentStatus", e.target.value)
-          }
-          className="w-full border rounded-lg px-3 py-2"
-        >
-          <option value="pending">pending</option>
-          <option value="paid">paid</option>
-          <option value="failed">failed</option>
-        </select>
-      </td>
+                      <select
+                        value={order.paymentStatus}
+                        onChange={(e) =>
+                          handleFieldChange(order.id, "paymentStatus", e.target.value)
+                        }
+                        className="w-full border rounded-lg px-3 py-2"
+                      >
+                        <option value="pending">pending</option>
+                        <option value="paid">paid</option>
+                        <option value="failed">failed</option>
+                      </select>
+                    </td>
 
-      <td className="p-3 border-b">
-        <div className="mb-2">
-          <span
-            className={`px-3 py-1 rounded-full text-sm font-semibold border ${orderStatusClass(
-              order.orderStatus
-            )}`}
-          >
-            {orderStatusLabel(order.orderStatus)}
-          </span>
-        </div>
+                    <td className="p-3 border-b">
+                      <div className="mb-2">
+                        <span
+                          className={`px-3 py-1 rounded-full text-sm font-semibold border ${orderStatusClass(
+                            order.orderStatus
+                          )}`}
+                        >
+                          {orderStatusLabel(order.orderStatus)}
+                        </span>
+                      </div>
 
-        <select
-          value={order.orderStatus}
-          onChange={(e) =>
-            handleFieldChange(order.id, "orderStatus", e.target.value)
-          }
-          className="w-full border rounded-lg px-3 py-2"
-        >
-          <option value="pending">pending</option>
-          <option value="confirmed">confirmed</option>
-          <option value="shipping">shipping</option>
-          <option value="completed">completed</option>
-          <option value="cancelled">cancelled</option>
-        </select>
-      </td>
+                      <select
+                        value={order.orderStatus}
+                        onChange={(e) =>
+                          handleFieldChange(order.id, "orderStatus", e.target.value)
+                        }
+                        className="w-full border rounded-lg px-3 py-2"
+                      >
+                        <option value="pending">pending</option>
+                        <option value="confirmed">confirmed</option>
+                        <option value="shipping">shipping</option>
+                        <option value="completed">completed</option>
+                        <option value="cancelled">cancelled</option>
+                      </select>
+                    </td>
 
-      <td className="p-3 border-b whitespace-nowrap text-sm text-slate-600">
-        {formatDate(order.createdAt)}
-      </td>
+                    <td className="p-3 border-b whitespace-nowrap text-sm text-slate-600">
+                      {formatDate(order.createdAt)}
+                    </td>
 
-      <td className="p-3 border-b whitespace-nowrap sticky right-0 bg-white z-10 shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.08)]">
-        <button
-          onClick={() => handleUpdateOrder(order)}
-          disabled={savingId === order.id}
-          className="px-4 py-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60"
-        >
-          {savingId === order.id ? "Đang lưu..." : "Cập nhật"}
-        </button>
-      </td>
-    </tr>
-  ))}
-</tbody>
+                    <td className="p-3 border-b whitespace-nowrap sticky right-0 bg-white z-10 shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.08)]">
+                      <button
+                        onClick={() => handleUpdateOrder(order)}
+                        disabled={savingId === order.id}
+                        className="px-4 py-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60"
+                      >
+                        {savingId === order.id ? "Đang lưu..." : "Cập nhật"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </div>
         )}

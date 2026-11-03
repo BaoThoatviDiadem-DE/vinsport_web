@@ -230,9 +230,6 @@ export const OrderTracking = () => {
         <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight mb-2">
           Quản Lý & Theo Dõi Đơn Hàng
         </h1>
-        <p className="text-slate-500 text-base max-w-xl mx-auto">
-          Tra cứu lộ trình vận chuyển thời gian thực và quản lý các đơn hàng đã đặt tại VinSport.
-        </p>
       </div>
 
       {/* 2. Tabs chuyển đổi */}
@@ -240,22 +237,20 @@ export const OrderTracking = () => {
         <div className="inline-flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
           <button
             onClick={() => setActiveTab("my-orders")}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${
-              activeTab === "my-orders"
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === "my-orders"
                 ? "bg-white text-orange-600 shadow-sm"
                 : "text-slate-600 hover:text-slate-900"
-            }`}
+              }`}
           >
             <ShoppingBag className="w-4 h-4" />
             Đơn hàng của tôi {isAuthenticated && myOrders.length > 0 && `(${myOrders.length})`}
           </button>
           <button
             onClick={() => setActiveTab("track")}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${
-              activeTab === "track"
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === "track"
                 ? "bg-white text-orange-600 shadow-sm"
                 : "text-slate-600 hover:text-slate-900"
-            }`}
+              }`}
           >
             <Search className="w-4 h-4" />
             Tra cứu theo mã đơn
@@ -305,11 +300,10 @@ export const OrderTracking = () => {
                     <button
                       key={filter.key}
                       onClick={() => setStatusFilter(filter.key)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                        statusFilter === filter.key
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${statusFilter === filter.key
                           ? "bg-slate-900 text-white"
                           : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      }`}
+                        }`}
                     >
                       {filter.label}
                     </button>
@@ -581,21 +575,19 @@ export const OrderTracking = () => {
                         return (
                           <div key={step.key} className="relative flex items-start gap-4">
                             <div
-                              className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 z-10 text-white font-bold text-xs transition-colors ${
-                                isDone
+                              className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 z-10 text-white font-bold text-xs transition-colors ${isDone
                                   ? isCurrent
                                     ? "bg-orange-500 ring-4 ring-orange-100"
                                     : "bg-emerald-500"
                                   : "bg-slate-300"
-                              }`}
+                                }`}
                             >
                               {isDone ? "✓" : idx + 1}
                             </div>
                             <div className="pt-0.5">
                               <h4
-                                className={`font-bold text-sm ${
-                                  isDone ? "text-slate-900" : "text-slate-400"
-                                }`}
+                                className={`font-bold text-sm ${isDone ? "text-slate-900" : "text-slate-400"
+                                  }`}
                               >
                                 {step.title}
                               </h4>

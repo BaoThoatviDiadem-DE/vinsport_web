@@ -26,3 +26,4 @@ WITH
 GO
 
 PRINT 'Da tao chung chi AWS S3 thanh cong! (Luu y: Can dien dung Key truoc khi thuc thi)';
+

@@ -26,6 +26,7 @@ export const Products = () => {
   const searchQuery = searchParams.get("search") || "";
   const selectedCategory = searchParams.get("category") || "";
   const selectedBrand = searchParams.get("brand") || "";
+  const selectedColor = searchParams.get("color") || "";
   const sortOrder = searchParams.get("sort") || "";
 
   const minPriceParam = searchParams.get("minPrice");
@@ -123,7 +124,7 @@ export const Products = () => {
     }
 
     return result;
-  }, [products, selectedCategory, selectedBrand, minPrice, maxPrice, sortOrder]);
+  }, [products, selectedCategory, selectedBrand, selectedColor, minPrice, maxPrice, sortOrder]);
 
   const FilterSidebar = () => (
     <div className="space-y-8">

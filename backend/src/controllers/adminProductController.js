@@ -41,6 +41,72 @@ async function getOrCreateByName(transaction, tableName, idColumn, nameValue) {
   return inserted.recordset[0].id;
 }
 
+
+const DEFAULT_HEX = {
+  "đen": "#000000",
+  "black": "#000000",
+  "trắng": "#FFFFFF",
+  "white": "#FFFFFF",
+  "đỏ": "#FF0000",
+  "red": "#FF0000",
+  "xanh": "#0000FF",
+  "xanh dương": "#0000FF",
+  "blue": "#0000FF",
+  "xanh lá": "#00FF00",
+  "green": "#00FF00",
+  "vàng": "#FFFF00",
+  "yellow": "#FFFF00",
+  "xám": "#808080",
+  "gray": "#808080",
+  "grey": "#808080",
+  "cam": "#FFA500",
+  "orange": "#FFA500",
+  "hồng": "#FFC0CB",
+  "pink": "#FFC0CB",
+  "tím": "#800080",
+  "purple": "#800080",
+};
+
+function normalizeColors(colors) {
+  if (Array.isArray(colors)) {
+    const cleaned = colors.map((c) => String(c).trim()).filter(Boolean);
+    return cleaned.length ? [...new Set(cleaned)] : ["Default"];
+  }
+
+  if (typeof colors === "string") {
+    const cleaned = colors
+      .split(/[,;]/)
+      .map((c) => c.trim())
+      .filter(Boolean);
+    return cleaned.length ? [...new Set(cleaned)] : ["Default"];
+  }
+
+  return ["Default"];
+}
+
+async function getOrCreateColor(transaction, colorName) {
+  const value = String(colorName || "Default").trim();
+  const existing = await new sql.Request(transaction)
+    .input("name", sql.NVarChar, value)
+    .query("SELECT TOP 1 color_id AS id FROM Colors WHERE name = @name");
+
+  if (existing.recordset.length > 0) {
+    return existing.recordset[0].id;
+  }
+
+  const hexCode = DEFAULT_HEX[value.toLowerCase()] || "#000000";
+  const inserted = await new sql.Request(transaction)
+    .input("name", sql.NVarChar, value)
+    .input("hex_code", sql.NVarChar, hexCode)
+    .query(`
+      INSERT INTO Colors (name, hex_code)
+      OUTPUT INSERTED.color_id AS id
+      VALUES (@name, @hex_code)
+    `);
+
+  return inserted.recordset[0].id;
+}
+
 async function getOrCreateDefaultColor(transaction) {
   return getOrCreateByName(transaction, "Colors", "color_id", "Default");
 }
@@ -133,6 +199,7 @@ const createAdminProduct = async (req, res) => {
       image,
       stock,
       sizes,
+      colors,
     } = req.body || {};
 
     if (!name || !String(name).trim()) {
@@ -172,24 +239,33 @@ const createAdminProduct = async (req, res) => {
         `);
     }
 
-    const colorId = await getOrCreateDefaultColor(transaction);
     const sizeNames = normalizeSizes(sizes);
+    const colorNames = normalizeColors(colors);
     const numericPrice = Number(price);
     const numericStock = Number(stock || 0);
 
-    for (let i = 0; i < sizeNames.length; i++) {
-      const sizeId = await getOrCreateByName(transaction, "Sizes", "size_id", sizeNames[i]);
+    const totalVariants = Math.max(1, sizeNames.length * colorNames.length);
+    const baseStockPerVariant = Math.floor(numericStock / totalVariants);
+    let remainingStock = numericStock % totalVariants;
 
-      await new sql.Request(transaction)
-        .input("product_id", sql.Int, productId)
-        .input("size_id", sql.Int, sizeId)
-        .input("color_id", sql.Int, colorId)
-        .input("price", sql.Decimal(10, 2), numericPrice)
-        .input("stock", sql.Int, i === 0 ? numericStock : 0)
-        .query(`
-          INSERT INTO ProductVariants (product_id, size_id, color_id, price, stock)
-          VALUES (@product_id, @size_id, @color_id, @price, @stock)
-        `);
+    for (let c = 0; c < colorNames.length; c++) {
+      const colorId = await getOrCreateColor(transaction, colorNames[c]);
+      for (let s = 0; s < sizeNames.length; s++) {
+        const sizeId = await getOrCreateByName(transaction, "Sizes", "size_id", sizeNames[s]);
+        const allocStock = baseStockPerVariant + (remainingStock > 0 ? 1 : 0);
+        if (remainingStock > 0) remainingStock--;
+
+        await new sql.Request(transaction)
+          .input("product_id", sql.Int, productId)
+          .input("size_id", sql.Int, sizeId)
+          .input("color_id", sql.Int, colorId)
+          .input("price", sql.Decimal(10, 2), numericPrice)
+          .input("stock", sql.Int, allocStock)
+          .query(`
+            INSERT INTO ProductVariants (product_id, size_id, color_id, price, stock)
+            VALUES (@product_id, @size_id, @color_id, @price, @stock)
+          `);
+      }
     }
 
     await transaction.commit();
@@ -228,6 +304,7 @@ const updateAdminProduct = async (req, res) => {
       image,
       stock,
       sizes,
+      colors,
     } = req.body || {};
 
     if (!productId) {
@@ -295,24 +372,33 @@ const updateAdminProduct = async (req, res) => {
       .input("product_id", sql.Int, productId)
       .query(`DELETE FROM ProductVariants WHERE product_id = @product_id`);
 
-    const colorId = await getOrCreateDefaultColor(transaction);
     const sizeNames = normalizeSizes(sizes);
+    const colorNames = normalizeColors(colors);
     const numericPrice = Number(price);
     const numericStock = Number(stock || 0);
 
-    for (let i = 0; i < sizeNames.length; i++) {
-      const sizeId = await getOrCreateByName(transaction, "Sizes", "size_id", sizeNames[i]);
+    const totalVariants = Math.max(1, sizeNames.length * colorNames.length);
+    const baseStockPerVariant = Math.floor(numericStock / totalVariants);
+    let remainingStock = numericStock % totalVariants;
 
-      await new sql.Request(transaction)
-        .input("product_id", sql.Int, productId)
-        .input("size_id", sql.Int, sizeId)
-        .input("color_id", sql.Int, colorId)
-        .input("price", sql.Decimal(10, 2), numericPrice)
-        .input("stock", sql.Int, i === 0 ? numericStock : 0)
-        .query(`
-          INSERT INTO ProductVariants (product_id, size_id, color_id, price, stock)
-          VALUES (@product_id, @size_id, @color_id, @price, @stock)
-        `);
+    for (let c = 0; c < colorNames.length; c++) {
+      const colorId = await getOrCreateColor(transaction, colorNames[c]);
+      for (let s = 0; s < sizeNames.length; s++) {
+        const sizeId = await getOrCreateByName(transaction, "Sizes", "size_id", sizeNames[s]);
+        const allocStock = baseStockPerVariant + (remainingStock > 0 ? 1 : 0);
+        if (remainingStock > 0) remainingStock--;
+
+        await new sql.Request(transaction)
+          .input("product_id", sql.Int, productId)
+          .input("size_id", sql.Int, sizeId)
+          .input("color_id", sql.Int, colorId)
+          .input("price", sql.Decimal(10, 2), numericPrice)
+          .input("stock", sql.Int, allocStock)
+          .query(`
+            INSERT INTO ProductVariants (product_id, size_id, color_id, price, stock)
+            VALUES (@product_id, @size_id, @color_id, @price, @stock)
+          `);
+      }
     }
 
     await transaction.commit();
@@ -363,9 +449,130 @@ const deleteAdminProduct = async (req, res) => {
   }
 };
 
+async function insertOrUpdateProductData(transaction, item) {
+  const name = String(item.name || "").trim();
+  if (!name) throw new Error("Tên sản phẩm không được để trống");
+
+  const price = Number(item.price);
+  if (isNaN(price) || price < 0) throw new Error(`Giá sản phẩm "${name}" không hợp lệ`);
+
+  const brandName = item.brand && String(item.brand).trim() ? String(item.brand).trim() : "VinSport";
+  const categoryName = item.category && String(item.category).trim() ? String(item.category).trim() : "Khác";
+
+  const brandId = await getOrCreateByName(transaction, "Brands", "brand_id", brandName);
+  const categoryId = await getOrCreateByName(transaction, "Categories", "category_id", categoryName);
+
+  const insertProduct = await new sql.Request(transaction)
+    .input("name", sql.NVarChar, name)
+    .input("description", sql.NVarChar, item.description ? String(item.description).trim() : null)
+    .input("brand_id", sql.Int, brandId)
+    .input("category_id", sql.Int, categoryId)
+    .query(`
+      INSERT INTO Products (name, description, brand_id, category_id)
+      OUTPUT INSERTED.product_id AS product_id
+      VALUES (@name, @description, @brand_id, @category_id)
+    `);
+
+  const productId = insertProduct.recordset[0].product_id;
+
+  if (item.image && String(item.image).trim()) {
+    await new sql.Request(transaction)
+      .input("product_id", sql.Int, productId)
+      .input("image_url", sql.NVarChar, String(item.image).trim())
+      .query(`
+        INSERT INTO ProductImages (product_id, image_url)
+        VALUES (@product_id, @image_url)
+      `);
+  }
+
+  const sizeNames = normalizeSizes(item.sizes);
+  const colorNames = normalizeColors(item.colors);
+  const numericStock = Number(item.stock || 0);
+
+  const totalVariants = sizeNames.length * colorNames.length;
+  const stockPerVariant = Math.max(0, Math.floor(numericStock / totalVariants));
+  let remainingStock = numericStock;
+
+  for (let c = 0; c < colorNames.length; c++) {
+    const colorId = await getOrCreateColor(transaction, colorNames[c]);
+
+    for (let s = 0; s < sizeNames.length; s++) {
+      const sizeId = await getOrCreateByName(transaction, "Sizes", "size_id", sizeNames[s]);
+      
+      const isLast = (c === colorNames.length - 1 && s === sizeNames.length - 1);
+      const variantStock = isLast ? Math.max(0, remainingStock) : Math.min(stockPerVariant, remainingStock);
+      remainingStock -= variantStock;
+
+      await new sql.Request(transaction)
+        .input("product_id", sql.Int, productId)
+        .input("size_id", sql.Int, sizeId)
+        .input("color_id", sql.Int, colorId)
+        .input("price", sql.Decimal(10, 2), price)
+        .input("stock", sql.Int, variantStock)
+        .query(`
+          INSERT INTO ProductVariants (product_id, size_id, color_id, price, stock)
+          VALUES (@product_id, @size_id, @color_id, @price, @stock)
+        `);
+    }
+  }
+
+  return productId;
+}
+
+const importAdminProducts = async (req, res) => {
+  const pool = await poolPromise;
+  const { products } = req.body || {};
+
+  if (!Array.isArray(products) || products.length === 0) {
+    return res.status(400).json({ message: "Danh sách sản phẩm từ file Excel rỗng hoặc không đúng định dạng." });
+  }
+
+  let importedCount = 0;
+  const errors = [];
+  const createdIds = [];
+
+  for (let i = 0; i < products.length; i++) {
+    const item = products[i];
+    const rowNumber = i + 1;
+    const transaction = new sql.Transaction(pool);
+    let started = false;
+
+    try {
+      await transaction.begin();
+      started = true;
+
+      const productId = await insertOrUpdateProductData(transaction, item);
+      await transaction.commit();
+      started = false;
+
+      createdIds.push(productId);
+      importedCount++;
+      uploadProductToS3(productId).catch(console.error);
+    } catch (err) {
+      if (started) {
+        try { await transaction.rollback(); } catch {}
+      }
+      errors.push({
+        row: rowNumber,
+        productName: item.name || `Dòng ${rowNumber}`,
+        error: err.message,
+      });
+    }
+  }
+
+  return res.json({
+    message: `Đã nhập thành công ${importedCount}/${products.length} sản phẩm từ file Excel.`,
+    importedCount,
+    total: products.length,
+    errors,
+  });
+};
+
+
 module.exports = {
   getAdminProducts,
   createAdminProduct,
   updateAdminProduct,
   deleteAdminProduct,
+  importAdminProducts,
 };

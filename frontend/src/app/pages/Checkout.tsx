@@ -128,14 +128,23 @@ export const Checkout = () => {
         email: user?.email || "",
         address: `${formData.address}, ${formData.city}`,
       },
-      items: items.map((item) => ({
-        productId: Number(item.product.id) || item.product.id,
-        name: item.product.name,
-        quantity: item.quantity,
-        size: item.selectedSize,
-        color: item.selectedColor,
-        price: item.product.price,
-      })),
+      items: items.map((item) => {
+        const matched = item.product.variants?.find(
+          (v) =>
+            v.size === item.selectedSize &&
+            v.color === item.selectedColor
+        );
+
+        return {
+          productId: Number(item.product.id) || item.product.id,
+          variantId: matched?.variantId,
+          name: item.product.name,
+          quantity: item.quantity,
+          size: item.selectedSize,
+          color: item.selectedColor,
+          price: matched?.price ?? item.product.price,
+        };
+      }),
       totalAmount: totalPrice,
       paymentMethod: formData.paymentMethod,
       orderDate: new Date().toISOString(),

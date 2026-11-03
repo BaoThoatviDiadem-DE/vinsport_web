@@ -239,9 +239,9 @@ export const ProductDetail = () => {
         const normalized = parseSizes(data.sizes);
 
         if (data.variants && data.variants.length > 0) {
-          const firstVariant = data.variants[0];
-          setSelectedSize(firstVariant.size || normalized[0] || "");
-          setSelectedColor(firstVariant.color || data.colors?.[0]?.name || "");
+          const firstInStock = data.variants.find((v: ProductVariant) => Number(v.stock || 0) > 0) || data.variants[0];
+          setSelectedSize(firstInStock.size || normalized[0] || "");
+          setSelectedColor(firstInStock.color || data.colors?.[0]?.name || "");
         } else {
           setSelectedSize(normalized[0] || "");
           setSelectedColor(data.colors?.[0]?.name || "");
@@ -294,26 +294,29 @@ export const ProductDetail = () => {
     return parseSizes(product.sizes);
   }, [product]);
 
-  const currentColorAvailableSizes = useMemo<string[]>(() => {
+  // TẤT CẢ các màu sắc có trong sản phẩm (không bị ẩn khi chọn size)
+  const allColors = useMemo<ProductColor[]>(() => {
     if (!product) return [];
 
     if (product.variants && product.variants.length > 0) {
-      const filtered = selectedColor
-        ? product.variants.filter(
-            (variant: ProductVariant) => variant.color === selectedColor
-          )
-        : product.variants;
+      const unique = new Map<string, ProductColor>();
 
-      return sortSizes(
-  filtered
-    .map((variant: ProductVariant) => variant.size)
-    .filter((size): size is string => Boolean(size))
-);
+      product.variants.forEach((variant: ProductVariant) => {
+        if (variant.color && !unique.has(variant.color)) {
+          unique.set(variant.color, {
+            name: variant.color,
+            hex: variant.hex || "#000000",
+          });
+        }
+      });
+
+      return Array.from(unique.values());
     }
 
-    return normalizedSizes;
-  }, [product, selectedColor, normalizedSizes]);
+    return product.colors || [];
+  }, [product]);
 
+  // TẤT CẢ các kích cỡ có trong sản phẩm
   const allSizes = useMemo<string[]>(() => {
     if (!product) return [];
 
@@ -329,42 +332,86 @@ export const ProductDetail = () => {
     return sortSizes([...fromProductSizes, ...fromVariants]);
   }, [product, normalizedSizes]);
 
-  const availableColors = useMemo<ProductColor[]>(() => {
-    if (!product) return [];
+  // Các size khả dụng cho màu đang chọn
+  const currentColorAvailableSizes = useMemo<string[]>(() => {
+    if (!product?.variants || product.variants.length === 0) return allSizes;
 
-    if (product.variants && product.variants.length > 0) {
-      const filtered = selectedSize
-        ? product.variants.filter(
-            (variant: ProductVariant) => variant.size === selectedSize
-          )
-        : product.variants;
+    const available = product.variants
+      .filter((variant: ProductVariant) => variant.color === selectedColor && Number(variant.stock || 0) > 0)
+      .map((variant: ProductVariant) => variant.size)
+      .filter((size): size is string => Boolean(size));
 
-      const unique = new Map<string, ProductColor>();
+    return sortSizes(available);
+  }, [product, selectedColor, allSizes]);
 
-      filtered.forEach((variant: ProductVariant) => {
-        if (variant.color && !unique.has(variant.color)) {
-          unique.set(variant.color, {
-            name: variant.color,
-            hex: variant.hex || "#000000",
-          });
+  // Hàm chọn màu sắc thông minh: tự động chọn size khả dụng tương ứng nếu size cũ không có màu này
+  const handleSelectColor = (colorName: string) => {
+    setSelectedColor(colorName);
+
+    if (!product?.variants || product.variants.length === 0) return;
+
+    const hasCurrentSize = product.variants.some(
+      (v: ProductVariant) => v.color === colorName && v.size === selectedSize && Number(v.stock || 0) > 0
+    );
+
+    if (!hasCurrentSize) {
+      const anyInStock = product.variants.find(
+        (v: ProductVariant) => v.color === colorName && Number(v.stock || 0) > 0
+      );
+      if (anyInStock?.size) {
+        setSelectedSize(anyInStock.size);
+      } else {
+        const anyVariant = product.variants.find((v: ProductVariant) => v.color === colorName);
+        if (anyVariant?.size) {
+          setSelectedSize(anyVariant.size);
         }
-      });
-
-      return Array.from(unique.values());
+      }
     }
+  };
 
-    return product.colors || [];
-  }, [product, selectedSize]);
+  // Hàm chọn size thông minh: tự động chọn màu khả dụng tương ứng nếu màu cũ không có size này
+  const handleSelectSize = (sizeName: string) => {
+    setSelectedSize(sizeName);
 
+    if (!product?.variants || product.variants.length === 0) return;
+
+    const hasCurrentColor = product.variants.some(
+      (v: ProductVariant) => v.size === sizeName && v.color === selectedColor && Number(v.stock || 0) > 0
+    );
+
+    if (!hasCurrentColor) {
+      const anyInStock = product.variants.find(
+        (v: ProductVariant) => v.size === sizeName && Number(v.stock || 0) > 0
+      );
+      if (anyInStock?.color) {
+        setSelectedColor(anyInStock.color);
+      } else {
+        const anyVariant = product.variants.find((v: ProductVariant) => v.size === sizeName);
+        if (anyVariant?.color) {
+          setSelectedColor(anyVariant.color);
+        }
+      }
+    }
+  };
+
+  // Biến thể hiện tại đang khớp chính xác
   const currentVariant = useMemo<ProductVariant | null>(() => {
     if (!product?.variants || product.variants.length === 0) return null;
 
-    return (
-      product.variants.find(
-        (variant: ProductVariant) =>
-          variant.size === selectedSize && variant.color === selectedColor
-      ) || null
+    // Khớp cả size và màu
+    const exact = product.variants.find(
+      (variant: ProductVariant) =>
+        variant.size === selectedSize && variant.color === selectedColor
     );
+    if (exact) return exact;
+
+    // Khớp màu
+    const matchColor = product.variants.find(
+      (variant: ProductVariant) => variant.color === selectedColor
+    );
+    if (matchColor) return matchColor;
+
+    return product.variants[0] || null;
   }, [product, selectedSize, selectedColor]);
 
   const displayPrice = currentVariant?.price ?? product?.price ?? 0;
@@ -380,28 +427,6 @@ export const ProductDetail = () => {
     if (allSizes.length > 0) return allSizes;
     return isShoeProduct ? defaultShoeGuideSizes : defaultGuideSizes;
   }, [allSizes, isShoeProduct]);
-
-  useEffect(() => {
-    if (!product?.variants || product.variants.length === 0) return;
-
-    if (
-      selectedSize &&
-      !currentColorAvailableSizes.includes(selectedSize) &&
-      currentColorAvailableSizes.length > 0
-    ) {
-      setSelectedSize(currentColorAvailableSizes[0]);
-    }
-  }, [currentColorAvailableSizes, selectedSize, product]);
-
-  useEffect(() => {
-    if (!product?.variants || product.variants.length === 0) return;
-
-    const colorNames = availableColors.map((color: ProductColor) => color.name);
-
-    if (!colorNames.includes(selectedColor) && availableColors.length > 0) {
-      setSelectedColor(availableColors[0].name);
-    }
-  }, [availableColors, selectedColor, product]);
 
   useEffect(() => {
     if (stock !== null && quantity > stock && stock > 0) {
@@ -448,7 +473,7 @@ export const ProductDetail = () => {
       return;
     }
 
-    if (availableColors.length > 0 && !selectedColor) {
+    if (allColors.length > 0 && !selectedColor) {
       alert("Vui lòng chọn màu sắc!");
       return;
     }
@@ -552,74 +577,142 @@ export const ProductDetail = () => {
                 </span>
               </div>
 
-              {stock !== null && (
+              {currentVariant ? (
                 <div className="mb-6">
                   <span
-                    className={`text-sm font-medium ${
-                      stock > 0 ? "text-emerald-600" : "text-red-500"
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold ${
+                      (currentVariant.stock ?? 0) > 0
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : "bg-red-50 text-red-600 border border-red-200"
                     }`}
                   >
+                    <span className={`w-2 h-2 rounded-full ${
+                      (currentVariant.stock ?? 0) > 0 ? "bg-emerald-500" : "bg-red-500"
+                    }`} />
+                    {(currentVariant.stock ?? 0) > 0
+                      ? `Còn ${currentVariant.stock} sản phẩm trong kho (Màu: ${selectedColor}, Size: ${selectedSize})`
+                      : `Hết hàng (Màu: ${selectedColor}, Size: ${selectedSize})`}
+                  </span>
+                </div>
+              ) : stock !== null ? (
+                <div className="mb-6">
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold ${
+                      stock > 0
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : "bg-red-50 text-red-600 border border-red-200"
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${
+                      stock > 0 ? "bg-emerald-500" : "bg-red-500"
+                    }`} />
                     {stock > 0 ? `Còn ${stock} sản phẩm` : "Hết hàng"}
                   </span>
                 </div>
+              ) : null}
+
+              {product.description && (
+                <p className="text-slate-600 mb-6 leading-relaxed">
+                  {product.description}
+                </p>
               )}
 
-              <p className="text-slate-600 mb-8 leading-relaxed">
-                {product.description}
-              </p>
-
-              {availableColors.length > 0 && (
+              {/* Chọn màu sắc - Hiển thị TẤT CẢ các màu của sản phẩm */}
+              {allColors.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="text-sm font-medium text-slate-900 mb-3">
-                    Màu sắc: {selectedColor}
-                  </h3>
-                  <div className="flex items-center gap-3">
-                    {availableColors.map((color: ProductColor, index: number) => (
-                      <button
-                        key={index}
-                        onClick={() => setSelectedColor(color.name)}
-                        className={`w-10 h-10 rounded-full border-2 focus:outline-none transition-all ${
-                          selectedColor === color.name
-                            ? "border-orange-600 ring-2 ring-offset-2 ring-orange-100"
-                            : "border-slate-200"
-                        }`}
-                        style={{ backgroundColor: color.hex || "#000000" }}
-                        title={color.name}
-                      />
-                    ))}
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-slate-900">
+                      Màu sắc: <span className="text-orange-600 font-bold">{selectedColor || "Chưa chọn"}</span>
+                    </h3>
+                    <span className="text-xs text-slate-400 font-medium">
+                      ({allColors.length} màu sắc khả dụng)
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {allColors.map((color: ProductColor, index: number) => {
+                      const isSelected = selectedColor === color.name;
+                      
+                      // Tính tổng tồn kho của màu này trên tất cả các size
+                      const totalColorStock = product.variants
+                        ? product.variants
+                            .filter((v: ProductVariant) => v.color === color.name)
+                            .reduce((sum: number, v: ProductVariant) => sum + Number(v.stock || 0), 0)
+                        : null;
+                      const isColorOutOfStock = totalColorStock !== null && totalColorStock <= 0;
+
+                      return (
+                        <button
+                          key={index}
+                          onClick={() => handleSelectColor(color.name)}
+                          className={`group relative flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-all cursor-pointer ${
+                            isSelected
+                              ? "border-orange-600 bg-orange-50/50 shadow-xs ring-1 ring-orange-200"
+                              : isColorOutOfStock
+                              ? "border-slate-200 opacity-50 bg-slate-50 cursor-not-allowed"
+                              : "border-slate-200 hover:border-slate-400 bg-white"
+                          }`}
+                          title={`${color.name}${isColorOutOfStock ? " (Hết hàng)" : totalColorStock !== null ? ` (Còn ${totalColorStock} sp)` : ""}`}
+                        >
+                          <span
+                            className="w-5 h-5 rounded-full border border-slate-300 shadow-2xs shrink-0 flex items-center justify-center"
+                            style={{ backgroundColor: color.hex || "#000000" }}
+                          >
+                            {isSelected && (
+                              <Check
+                                className={`w-3 h-3 ${
+                                  color.hex?.toLowerCase() === "#ffffff" || color.name.toLowerCase() === "trắng"
+                                    ? "text-slate-900"
+                                    : "text-white"
+                                }`}
+                              />
+                            )}
+                          </span>
+                          <span
+                            className={`text-sm ${
+                              isSelected
+                                ? "font-bold text-orange-600"
+                                : "font-medium text-slate-700"
+                            }`}
+                          >
+                            {color.name}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
+              {/* Chọn kích cỡ */}
               {allSizes.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-slate-900 mb-3">
-                    Kích cỡ
-                  </h3>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-slate-900">
+                      Kích cỡ: <span className="text-slate-900 font-bold">{selectedSize || "Chưa chọn"}</span>
+                    </h3>
+                  </div>
 
                   <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-4 lg:grid-cols-5 gap-2">
                     {allSizes.map((size: string, index: number) => {
-                      const isAvailable = currentColorAvailableSizes.includes(size);
+                      const isAvailableForColor = currentColorAvailableSizes.includes(size);
                       const isSelected = selectedSize === size;
 
                       return (
                         <button
                           key={index}
-                          onClick={() => {
-                            if (isAvailable) setSelectedSize(size);
-                          }}
-                          disabled={!isAvailable}
-                          className={`px-4 py-3 min-w-[3rem] text-sm font-medium border transition-all ${
+                          onClick={() => handleSelectSize(size)}
+                          className={`px-4 py-3 min-w-[3rem] text-sm font-medium border rounded-xl transition-all cursor-pointer ${
                             isSelected
-                              ? "bg-slate-900 text-white border-slate-900"
-                              : isAvailable
-                              ? "bg-slate-100 text-slate-700 border-slate-200 hover:border-orange-600 hover:text-orange-600"
-                              : "bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed opacity-60"
+                              ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                              : isAvailableForColor
+                              ? "bg-white text-slate-700 border-slate-200 hover:border-orange-600 hover:text-orange-600"
+                              : "bg-slate-50 text-slate-400 border-slate-200 hover:border-slate-300"
                           }`}
                           title={
-                            isAvailable
-                              ? size
-                              : `Size ${size} không có ở màu đang chọn`
+                            isAvailableForColor
+                              ? `Size ${size} (Màu ${selectedColor})`
+                              : `Size ${size} (Nhấp để chuyển sang màu có size này)`
                           }
                         >
                           {size}

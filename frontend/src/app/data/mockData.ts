@@ -15,6 +15,15 @@ export type Product = {
   }[];
   description: string;
   isNew?: boolean;
+  stock?: number;
+  variants?: {
+    variantId: number;
+    size: string;
+    color: string;
+    hex?: string;
+    price: number;
+    stock: number;
+  }[];
 };
 
 export const MOCK_PRODUCTS: Product[] = [

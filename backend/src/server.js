@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 
-dotenv.config();
+dotenv.config({ path: require("path").resolve(__dirname, "../.env") });
 
 const { connectDB } = require("./db");
 const productRoutes = require("./routes/productRoutes");
