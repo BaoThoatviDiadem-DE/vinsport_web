@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { poolPromise, sql } = require("../db");
 const { uploadOrderToS3, uploadUserToS3 } = require("../utils/s3Service");
+const { sendOrderEmail } = require("../utils/emailService");
 const { verifyToken } = require("../middlewares/authMiddleware");
 
 function mapPaymentMethod(method) {
@@ -9,7 +10,6 @@ function mapPaymentMethod(method) {
 
   if (value === "cod") return "COD";
   if (value === "banking") return "Bank";
-  if (value === "momo") return "Momo";
 
   return "COD";
 }
@@ -157,6 +157,15 @@ router.post("/orders", async (req, res) => {
 
       if (!productId || quantity <= 0 || price <= 0) {
         throw new Error("Thông tin sản phẩm trong đơn hàng không hợp lệ");
+      }
+
+      // Kiểm tra sản phẩm có thực sự tồn tại trong CSDL không
+      const productCheck = await new sql.Request(transaction)
+        .input("productId", sql.Int, productId)
+        .query(`SELECT TOP 1 product_id, name FROM Products WHERE product_id = @productId`);
+
+      if (productCheck.recordset.length === 0) {
+        throw new Error(`Sản phẩm "${item.name || productId}" không tồn tại trong CSDL (dữ liệu giỏ hàng cũ trước khi cập nhật). Vui lòng vào Giỏ hàng xóa sản phẩm này ra rồi thử lại!`);
       }
 
       let variantResult;
@@ -309,6 +318,7 @@ router.post("/orders", async (req, res) => {
     // Hàm này chạy ngầm (không await) để không làm chậm response trả về cho user
     uploadOrderToS3(orderId);
     uploadUserToS3(userId); // Backup luôn thông tin khách hàng nếu họ có đổi thông tin
+    sendOrderEmail(orderId, "NEW_ORDER");
 
     return res.status(201).json({
       message: "Tạo đơn hàng thành công",
@@ -717,6 +727,7 @@ router.put("/orders/:id/cancel", verifyToken, async (req, res) => {
 
     // Đồng bộ sang Amazon S3 Data Lakehouse
     uploadOrderToS3(orderId);
+    sendOrderEmail(orderId, "CANCELLED");
 
     return res.json({
       success: true,

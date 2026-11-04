@@ -1,11 +1,11 @@
 const { sql, poolPromise } = require("../db");
 const { uploadOrderToS3 } = require("../utils/s3Service");
+const { sendOrderEmail } = require("../utils/emailService");
 
 function normalizePaymentMethod(value) {
   const method = String(value || "").toLowerCase();
   if (method === "bank") return "banking";
   if (method === "cod") return "cod";
-  if (method === "momo") return "momo";
   return method || "cod";
 }
 
@@ -185,6 +185,7 @@ const updateAdminOrder = async (req, res) => {
     await transaction.commit();
 
     uploadOrderToS3(orderId);
+    sendOrderEmail(orderId, "STATUS_UPDATED");
 
     return res.json({
       message: "Cập nhật đơn hàng thành công",
@@ -245,6 +246,7 @@ const updateAdminOrderStatus = async (req, res) => {
       `);
 
     uploadOrderToS3(orderId);
+    sendOrderEmail(orderId, "STATUS_UPDATED");
 
     return res.json({
       message: "Cập nhật trạng thái đơn hàng thành công",
@@ -309,6 +311,7 @@ const updateAdminPaymentStatus = async (req, res) => {
     }
 
     uploadOrderToS3(orderId);
+    sendOrderEmail(orderId, "STATUS_UPDATED");
 
     return res.json({
       message: "Cập nhật trạng thái thanh toán thành công",

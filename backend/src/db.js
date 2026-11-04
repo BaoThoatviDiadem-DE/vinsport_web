@@ -16,10 +16,35 @@ const poolPromise = new sql.ConnectionPool(dbConfig)
   .connect()
   .then((pool) => {
     console.log("Kết nối SQL Server thành công");
+    pool.on("error", (err) => {
+      console.error("Lỗi SQL Pool runtime:", err.message);
+      try {
+        const { sendTechnicalAlert } = require("./utils/snsService");
+        sendTechnicalAlert({
+          level: "CRITICAL",
+          title: "SỰ CỐ RUNTIME CƠ SỞ DỮ LIỆU SQL SERVER",
+          message: `Connection pool phát hiện lỗi runtime: ${err.message}`,
+          error: err,
+        });
+      } catch (_) {}
+    });
     return pool;
   })
   .catch((error) => {
     console.error("Lỗi kết nối SQL Server:", error.message);
+    try {
+      const { sendTechnicalAlert } = require("./utils/snsService");
+      sendTechnicalAlert({
+        level: "CRITICAL",
+        title: "MẤT KẾT NỐI CƠ SỞ DỮ LIỆU SQL SERVER",
+        message: "Không thể kết nối tới SQL Server khi khởi động hoặc truy vấn.",
+        error: error,
+        context: {
+          server: dbConfig.server,
+          database: dbConfig.database,
+        },
+      });
+    } catch (_) {}
     throw error;
   });
 

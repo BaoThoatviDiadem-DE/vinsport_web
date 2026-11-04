@@ -12,6 +12,7 @@ const adminProductRoutes = require("./routes/adminProductRoutes");
 const adminUserRoutes = require("./routes/adminUserRoutes");
 const adminOrderRoutes = require("./routes/adminOrderRoutes");
 const adminAnalyticsRoutes = require("./routes/adminAnalyticsRoutes");
+const { sendTechnicalAlert } = require("./utils/snsService");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -24,7 +25,8 @@ app.use(
   })
 );
 
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 app.get("/", (req, res) => {
   res.json({
@@ -50,6 +52,22 @@ app.use((req, res) => {
 
 app.use((err, req, res, next) => {
   console.error("SERVER ERROR:", err);
+
+  // Phát cảnh báo khẩn cấp qua Amazon SNS tới Admin (bnam72862@gmail.com)
+  sendTechnicalAlert({
+    level: err.status >= 500 || !err.status ? "HIGH" : "MEDIUM",
+    title: `Lỗi Server tại ${req.method} ${req.originalUrl}`,
+    message: `Một request gặp lỗi nghiêm trọng: ${err.message}`,
+    error: err,
+    req: req,
+  });
+
+  if (err.type === "entity.too.large") {
+    return res.status(413).json({
+      message: "Dữ liệu gửi lên quá lớn. Vui lòng giảm số dòng trong file Excel rồi thử lại.",
+    });
+  }
+
   res.status(500).json({
     message: "Lỗi server",
   });

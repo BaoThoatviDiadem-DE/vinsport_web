@@ -96,13 +96,13 @@ function normalizeProduct(item: any): Product {
     sizes: Array.isArray(item?.sizes)
       ? item.sizes
       : typeof item?.sizes === "string" && item.sizes.trim() !== ""
-      ? item.sizes.split(",").map((s: string) => s.trim())
-      : [],
+        ? item.sizes.split(",").map((s: string) => s.trim())
+        : [],
     colors: Array.isArray(item?.colors)
       ? item.colors.map((c: any) => (typeof c === "object" ? c.name : c))
       : typeof item?.colors === "string" && item.colors.trim() !== ""
-      ? item.colors.split(",").map((c: string) => c.trim())
-      : [],
+        ? item.colors.split(",").map((c: string) => c.trim())
+        : [],
   };
 }
 
@@ -208,16 +208,16 @@ export default function AdminProducts() {
     const sizesCount = Array.isArray(form.sizes)
       ? form.sizes.filter(Boolean).length
       : typeof form.sizes === "string"
-      ? form.sizes.split(",").map((s) => s.trim()).filter(Boolean).length
-      : 0;
+        ? form.sizes.split(",").map((s) => s.trim()).filter(Boolean).length
+        : 0;
     if (sizesCount === 0) errs.sizes = true;
 
     // 8. Màu sắc
     const colorsCount = Array.isArray(form.colors)
       ? form.colors.filter(Boolean).length
       : typeof form.colors === "string"
-      ? form.colors.split(",").map((c) => c.trim()).filter(Boolean).length
-      : 0;
+        ? form.colors.split(",").map((c) => c.trim()).filter(Boolean).length
+        : 0;
     if (colorsCount === 0) errs.colors = true;
 
     // 9. Mô tả
@@ -364,13 +364,13 @@ export default function AdminProducts() {
       sizes: Array.isArray(form.sizes)
         ? form.sizes
         : typeof form.sizes === "string"
-        ? (form.sizes as string).split(",").map((s) => s.trim()).filter(Boolean)
-        : [],
+          ? (form.sizes as string).split(",").map((s) => s.trim()).filter(Boolean)
+          : [],
       colors: Array.isArray(form.colors)
         ? form.colors
         : typeof form.colors === "string"
-        ? (form.colors as string).split(",").map((c) => c.trim()).filter(Boolean)
-        : [],
+          ? (form.colors as string).split(",").map((c) => c.trim()).filter(Boolean)
+          : [],
       description: form.description?.trim() || "",
     };
 
@@ -674,7 +674,9 @@ export default function AdminProducts() {
         })),
       };
 
-      const res: any = await api.post("/admin/products/import", payload);
+      const res: any = await api.post("/admin/products/import", payload, {
+        timeout: 180000,
+      });
 
       toast.success(
         res?.message || `Đã nhập thành công ${validItems.length} sản phẩm từ file Excel!`
@@ -777,11 +779,10 @@ export default function AdminProducts() {
             <button
               type="button"
               onClick={() => setCategoryFilter("all")}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                categoryFilter === "all"
-                  ? "bg-slate-900 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${categoryFilter === "all"
+                ? "bg-slate-900 text-white shadow-xs"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
             >
               Tất cả ({products.length})
             </button>
@@ -791,11 +792,10 @@ export default function AdminProducts() {
               onClick={() =>
                 setCategoryFilter((prev) => (prev === "Áo" ? "all" : "Áo"))
               }
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                categoryFilter === "Áo"
-                  ? "bg-orange-600 text-white shadow-xs"
-                  : "bg-orange-50 text-orange-700 hover:bg-orange-100"
-              }`}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${categoryFilter === "Áo"
+                ? "bg-orange-600 text-white shadow-xs"
+                : "bg-orange-50 text-orange-700 hover:bg-orange-100"
+                }`}
             >
               Áo: {aoCount}
             </button>
@@ -805,11 +805,10 @@ export default function AdminProducts() {
               onClick={() =>
                 setCategoryFilter((prev) => (prev === "Quần" ? "all" : "Quần"))
               }
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                categoryFilter === "Quần"
-                  ? "bg-blue-600 text-white shadow-xs"
-                  : "bg-blue-50 text-blue-700 hover:bg-blue-100"
-              }`}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${categoryFilter === "Quần"
+                ? "bg-blue-600 text-white shadow-xs"
+                : "bg-blue-50 text-blue-700 hover:bg-blue-100"
+                }`}
             >
               Quần: {quanCount}
             </button>
@@ -819,11 +818,10 @@ export default function AdminProducts() {
               onClick={() =>
                 setCategoryFilter((prev) => (prev === "Giày" ? "all" : "Giày"))
               }
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                categoryFilter === "Giày"
-                  ? "bg-emerald-600 text-white shadow-xs"
-                  : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-              }`}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${categoryFilter === "Giày"
+                ? "bg-emerald-600 text-white shadow-xs"
+                : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                }`}
             >
               Giày: {giayCount}
             </button>
@@ -897,11 +895,10 @@ export default function AdminProducts() {
                     <td className="p-4 text-slate-600">{product.category || "-"}</td>
                     <td className="p-4 font-medium text-slate-600">{product.brand || "-"}</td>
                     <td className="p-4 font-semibold">
-                      <span className={`px-2.5 py-1 rounded-md text-xs font-bold ${
-                        Number(product.stock || 0) > 0
-                          ? "bg-emerald-50 text-emerald-700"
-                          : "bg-red-50 text-red-600"
-                      }`}>
+                      <span className={`px-2.5 py-1 rounded-md text-xs font-bold ${Number(product.stock || 0) > 0
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-red-50 text-red-600"
+                        }`}>
                         {product.stock ?? 0}
                       </span>
                     </td>
@@ -976,11 +973,10 @@ export default function AdminProducts() {
                     value={form.name}
                     onChange={handleChange}
                     placeholder="Nhập tên sản phẩm"
-                    className={`w-full border rounded-xl px-4 py-3 outline-none text-sm transition-all ${
-                      hasSubmitted && fieldErrors.name
-                        ? "border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
-                        : "border-slate-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                    }`}
+                    className={`w-full border rounded-xl px-4 py-3 outline-none text-sm transition-all ${hasSubmitted && fieldErrors.name
+                      ? "border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                      : "border-slate-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                      }`}
                   />
                   {hasSubmitted && fieldErrors.name && (
                     <p className="text-xs font-bold text-red-500 mt-1">
@@ -999,11 +995,10 @@ export default function AdminProducts() {
                     value={form.price}
                     onChange={handleChange}
                     placeholder="Ví dụ: 350000"
-                    className={`w-full border rounded-xl px-4 py-3 outline-none text-sm transition-all ${
-                      hasSubmitted && fieldErrors.price
-                        ? "border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
-                        : "border-slate-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                    }`}
+                    className={`w-full border rounded-xl px-4 py-3 outline-none text-sm transition-all ${hasSubmitted && fieldErrors.price
+                      ? "border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                      : "border-slate-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                      }`}
                   />
                   {hasSubmitted && fieldErrors.price && (
                     <p className="text-xs font-bold text-red-500 mt-1">
@@ -1021,11 +1016,10 @@ export default function AdminProducts() {
                     value={form.category || ""}
                     onChange={handleChange}
                     placeholder="Ví dụ: Áo, Quần, Giày, Phụ kiện"
-                    className={`w-full border rounded-xl px-4 py-3 outline-none text-sm transition-all ${
-                      hasSubmitted && fieldErrors.category
-                        ? "border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
-                        : "border-slate-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                    }`}
+                    className={`w-full border rounded-xl px-4 py-3 outline-none text-sm transition-all ${hasSubmitted && fieldErrors.category
+                      ? "border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                      : "border-slate-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                      }`}
                   />
                   {hasSubmitted && fieldErrors.category && (
                     <p className="text-xs font-bold text-red-500 mt-1">
@@ -1043,11 +1037,10 @@ export default function AdminProducts() {
                     value={form.brand || ""}
                     onChange={handleChange}
                     placeholder="Ví dụ: Nike, Adidas, Puma"
-                    className={`w-full border rounded-xl px-4 py-3 outline-none text-sm transition-all ${
-                      hasSubmitted && fieldErrors.brand
-                        ? "border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
-                        : "border-slate-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                    }`}
+                    className={`w-full border rounded-xl px-4 py-3 outline-none text-sm transition-all ${hasSubmitted && fieldErrors.brand
+                      ? "border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                      : "border-slate-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                      }`}
                   />
                   {hasSubmitted && fieldErrors.brand && (
                     <p className="text-xs font-bold text-red-500 mt-1">
@@ -1065,11 +1058,10 @@ export default function AdminProducts() {
                     value={form.image || ""}
                     onChange={handleChange}
                     placeholder="Dán link ảnh (https://...)"
-                    className={`w-full border rounded-xl px-4 py-3 outline-none text-sm transition-all ${
-                      hasSubmitted && fieldErrors.image
-                        ? "border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
-                        : "border-slate-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                    }`}
+                    className={`w-full border rounded-xl px-4 py-3 outline-none text-sm transition-all ${hasSubmitted && fieldErrors.image
+                      ? "border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                      : "border-slate-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                      }`}
                   />
                   {hasSubmitted && fieldErrors.image && (
                     <p className="text-xs font-bold text-red-500 mt-1">
@@ -1088,11 +1080,10 @@ export default function AdminProducts() {
                     value={form.stock ?? ""}
                     onChange={handleChange}
                     placeholder="Số lượng tồn kho ban đầu"
-                    className={`w-full border rounded-xl px-4 py-3 outline-none text-sm transition-all ${
-                      hasSubmitted && fieldErrors.stock
-                        ? "border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
-                        : "border-slate-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                    }`}
+                    className={`w-full border rounded-xl px-4 py-3 outline-none text-sm transition-all ${hasSubmitted && fieldErrors.stock
+                      ? "border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                      : "border-slate-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                      }`}
                   />
                   {hasSubmitted && fieldErrors.stock && (
                     <p className="text-xs font-bold text-red-500 mt-1">
@@ -1110,11 +1101,10 @@ export default function AdminProducts() {
                     value={Array.isArray(form.sizes) ? form.sizes.join(", ") : ""}
                     onChange={handleChange}
                     placeholder="Ví dụ: S, M, L, XL hoặc 40, 41, 42"
-                    className={`w-full border rounded-xl px-4 py-3 outline-none text-sm transition-all ${
-                      hasSubmitted && fieldErrors.sizes
-                        ? "border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
-                        : "border-slate-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                    }`}
+                    className={`w-full border rounded-xl px-4 py-3 outline-none text-sm transition-all ${hasSubmitted && fieldErrors.sizes
+                      ? "border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                      : "border-slate-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                      }`}
                   />
                   {hasSubmitted && fieldErrors.sizes && (
                     <p className="text-xs font-bold text-red-500 mt-1">
@@ -1132,11 +1122,10 @@ export default function AdminProducts() {
                     value={Array.isArray(form.colors) ? form.colors.join(", ") : ""}
                     onChange={handleChange}
                     placeholder="Ví dụ: Đen, Trắng, Đỏ, Xanh"
-                    className={`w-full border rounded-xl px-4 py-3 outline-none text-sm transition-all ${
-                      hasSubmitted && fieldErrors.colors
-                        ? "border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
-                        : "border-slate-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                    }`}
+                    className={`w-full border rounded-xl px-4 py-3 outline-none text-sm transition-all ${hasSubmitted && fieldErrors.colors
+                      ? "border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                      : "border-slate-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                      }`}
                   />
                   {hasSubmitted && fieldErrors.colors && (
                     <p className="text-xs font-bold text-red-500 mt-1">
@@ -1155,11 +1144,10 @@ export default function AdminProducts() {
                     onChange={handleChange}
                     placeholder="Nhập mô tả sản phẩm..."
                     rows={3}
-                    className={`w-full border rounded-xl px-4 py-3 outline-none text-sm transition-all ${
-                      hasSubmitted && fieldErrors.description
-                        ? "border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
-                        : "border-slate-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                    }`}
+                    className={`w-full border rounded-xl px-4 py-3 outline-none text-sm transition-all ${hasSubmitted && fieldErrors.description
+                      ? "border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                      : "border-slate-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                      }`}
                   />
                   {hasSubmitted && fieldErrors.description && (
                     <p className="text-xs font-bold text-red-500 mt-1">
@@ -1257,11 +1245,10 @@ export default function AdminProducts() {
 
                 {/* Phần Không hợp lệ (luôn hiển thị cạnh Hợp lệ) */}
                 <div
-                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl font-bold border ${
-                    invalidCount > 0
-                      ? "bg-red-50 text-red-600 border-red-200"
-                      : "bg-slate-100 text-slate-500 border-slate-200"
-                  }`}
+                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl font-bold border ${invalidCount > 0
+                    ? "bg-red-50 text-red-600 border-red-200"
+                    : "bg-slate-100 text-slate-500 border-slate-200"
+                    }`}
                 >
                   <AlertCircle className="w-4 h-4" />
                   <span>Không hợp lệ: {invalidCount}</span>
@@ -1273,33 +1260,30 @@ export default function AdminProducts() {
                 <button
                   type="button"
                   onClick={() => setPreviewFilter("all")}
-                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                    previewFilter === "all"
-                      ? "bg-slate-900 text-white shadow-xs"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                  }`}
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${previewFilter === "all"
+                    ? "bg-slate-900 text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                    }`}
                 >
                   Tất cả ({importPreviewList.length})
                 </button>
                 <button
                   type="button"
                   onClick={() => setPreviewFilter("valid")}
-                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                    previewFilter === "valid"
-                      ? "bg-emerald-600 text-white shadow-xs"
-                      : "text-slate-600 hover:text-emerald-700 hover:bg-slate-50"
-                  }`}
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${previewFilter === "valid"
+                    ? "bg-emerald-600 text-white shadow-xs"
+                    : "text-slate-600 hover:text-emerald-700 hover:bg-slate-50"
+                    }`}
                 >
                   Hợp lệ ({validCount})
                 </button>
                 <button
                   type="button"
                   onClick={() => setPreviewFilter("invalid")}
-                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                    previewFilter === "invalid"
-                      ? "bg-red-600 text-white shadow-xs"
-                      : "text-slate-600 hover:text-red-700 hover:bg-slate-50"
-                  }`}
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${previewFilter === "invalid"
+                    ? "bg-red-600 text-white shadow-xs"
+                    : "text-slate-600 hover:text-red-700 hover:bg-slate-50"
+                    }`}
                 >
                   Không hợp lệ ({invalidCount})
                 </button>
@@ -1334,9 +1318,8 @@ export default function AdminProducts() {
                       displayedPreviewList.map((item, idx) => (
                         <tr
                           key={idx}
-                          className={`transition-colors ${
-                            item.isValid ? "hover:bg-slate-50" : "bg-red-50/40 hover:bg-red-50/70"
-                          }`}
+                          className={`transition-colors ${item.isValid ? "hover:bg-slate-50" : "bg-red-50/40 hover:bg-red-50/70"
+                            }`}
                         >
                           <td className="p-3 font-bold text-slate-400">#{item.rowIdx}</td>
 

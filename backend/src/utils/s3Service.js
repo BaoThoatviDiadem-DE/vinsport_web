@@ -84,6 +84,16 @@ async function uploadOrderToS3(orderId) {
 
   } catch (error) {
     console.error(`[S3 Backup] Lỗi khi đẩy đơn hàng ${orderId} lên S3:`, error.message);
+    try {
+      const { sendTechnicalAlert } = require("./snsService");
+      sendTechnicalAlert({
+        level: "MEDIUM",
+        title: "LỖI ĐỒNG BỘ ĐƠN HÀNG LÊN AMAZON S3 LAKEHOUSE",
+        message: `Không thể đồng bộ dữ liệu đơn hàng #${orderId} lên bucket S3: ${BUCKET_NAME}`,
+        error: error,
+        context: { orderId, bucket: BUCKET_NAME },
+      });
+    } catch (_) {}
   }
 }
 
