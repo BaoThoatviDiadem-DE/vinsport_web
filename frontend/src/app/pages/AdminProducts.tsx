@@ -714,12 +714,15 @@ export default function AdminProducts() {
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
       {/* HEADER VÀ THANH CÔNG CỤ NHẬP EXCEL */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
         <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight">
-            Quản lý sản phẩm
-          </h1>
-          <p className="text-slate-500 text-sm mt-1">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-2.5 h-6 rounded-full bg-orange-500" />
+            <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+              Quản lý sản phẩm
+            </h1>
+          </div>
+          <p className="text-slate-500 text-sm mt-1 ml-4.5">
             Thêm mới, chỉnh sửa hoặc nhập hàng loạt từ file Excel.
           </p>
         </div>
@@ -772,14 +775,14 @@ export default function AdminProducts() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
           <div className="flex items-center gap-2.5 flex-wrap">
             <div className="flex items-center gap-2">
-              <div className="w-2.5 h-6 rounded-full bg-slate-800" />
+              <div className="w-2.5 h-6 rounded-full bg-orange-500" />
               <h2 className="text-xl font-bold text-slate-900">Danh sách sản phẩm</h2>
             </div>
 
             <button
               type="button"
               onClick={() => setCategoryFilter("all")}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${categoryFilter === "all"
+              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${categoryFilter === "all"
                 ? "bg-slate-900 text-white shadow-xs"
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                 }`}
@@ -792,9 +795,9 @@ export default function AdminProducts() {
               onClick={() =>
                 setCategoryFilter((prev) => (prev === "Áo" ? "all" : "Áo"))
               }
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${categoryFilter === "Áo"
+              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${categoryFilter === "Áo"
                 ? "bg-orange-600 text-white shadow-xs"
-                : "bg-orange-50 text-orange-700 hover:bg-orange-100"
+                : "bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200/60"
                 }`}
             >
               Áo: {aoCount}
@@ -805,9 +808,9 @@ export default function AdminProducts() {
               onClick={() =>
                 setCategoryFilter((prev) => (prev === "Quần" ? "all" : "Quần"))
               }
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${categoryFilter === "Quần"
+              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${categoryFilter === "Quần"
                 ? "bg-blue-600 text-white shadow-xs"
-                : "bg-blue-50 text-blue-700 hover:bg-blue-100"
+                : "bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200/60"
                 }`}
             >
               Quần: {quanCount}
@@ -818,9 +821,9 @@ export default function AdminProducts() {
               onClick={() =>
                 setCategoryFilter((prev) => (prev === "Giày" ? "all" : "Giày"))
               }
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${categoryFilter === "Giày"
+              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${categoryFilter === "Giày"
                 ? "bg-emerald-600 text-white shadow-xs"
-                : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/60"
                 }`}
             >
               Giày: {giayCount}

@@ -130,25 +130,33 @@ export default function AdminUsers() {
 
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900">Quản lý người dùng</h1>
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-2.5 h-6 rounded-full bg-orange-500" />
+          <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+            Quản lý người dùng
+          </h1>
+        </div>
+        <p className="text-slate-500 text-sm mt-1 ml-4.5">
+          Quản lý thông tin tài khoản, phân quyền quản trị viên và khách hàng.
+        </p>
       </div>
 
       <form
         onSubmit={handleSearch}
-        className="bg-white rounded-2xl shadow-sm border p-5 flex flex-col md:flex-row gap-3"
+        className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-5 flex flex-col md:flex-row gap-3"
       >
         <input
           type="text"
           value={searchEmail}
           onChange={(e) => setSearchEmail(e.target.value)}
           placeholder="Tìm kiếm theo email..."
-          className="flex-1 border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-orange-500"
+          className="flex-1 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 text-sm transition-all"
         />
 
         <button
           type="submit"
-          className="px-5 py-3 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+          className="px-5 py-2.5 rounded-xl bg-slate-900 text-white hover:bg-slate-800 text-sm font-semibold transition-colors cursor-pointer"
         >
           Tìm kiếm
         </button>
@@ -156,54 +164,62 @@ export default function AdminUsers() {
         <button
           type="button"
           onClick={handleResetSearch}
-          className="px-5 py-3 rounded-xl bg-slate-200 text-slate-900 hover:bg-slate-300"
+          className="px-5 py-2.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 text-sm font-semibold transition-colors cursor-pointer"
         >
           Đặt lại
         </button>
       </form>
 
-      <div className="bg-white rounded-2xl shadow-sm border p-5">
-        <div className="flex items-center gap-3 flex-wrap mb-4">
-          <h2 className="text-xl font-semibold">Danh sách người dùng</h2>
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-5 md:p-6">
+        <div className="flex items-center gap-2.5 flex-wrap mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-6 rounded-full bg-orange-500" />
+            <h2 className="text-xl font-bold text-slate-900">Danh sách người dùng</h2>
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setRoleFilter("all")}
-            className={`px-3 py-1 rounded-full text-sm font-semibold transition ${roleFilter === "all"
-                ? "bg-orange-500 text-white"
-                : "bg-orange-100 text-orange-700 hover:bg-orange-200"
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setRoleFilter("all")}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                roleFilter === "all"
+                  ? "bg-slate-900 text-white shadow-xs"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               }`}
-          >
-            Tổng số: {users.length}
-          </button>
+            >
+              Tất cả ({users.length})
+            </button>
 
-          <button
-            type="button"
-            onClick={() => handleRoleFilterClick("admin")}
-            className={`px-3 py-1 rounded-full text-sm font-semibold transition ${roleFilter === "admin"
-                ? "bg-red-500 text-white"
-                : "bg-red-100 text-red-700 hover:bg-red-200"
+            <button
+              type="button"
+              onClick={() => handleRoleFilterClick("admin")}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                roleFilter === "admin"
+                  ? "bg-rose-600 text-white shadow-xs"
+                  : "bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/60"
               }`}
-          >
-            Admin: {adminCount}
-          </button>
+            >
+              Admin: {adminCount}
+            </button>
 
-          <button
-            type="button"
-            onClick={() => handleRoleFilterClick("user")}
-            className={`px-3 py-1 rounded-full text-sm font-semibold transition ${roleFilter === "user"
-                ? "bg-blue-500 text-white"
-                : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+            <button
+              type="button"
+              onClick={() => handleRoleFilterClick("user")}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                roleFilter === "user"
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200/60"
               }`}
-          >
-            User: {userCount}
-          </button>
+            >
+              User: {userCount}
+            </button>
 
-          {roleFilter !== "all" && (
-            <span className="text-sm text-slate-500">
-              Đang lọc: <span className="font-semibold">{roleFilter}</span>
-            </span>
-          )}
+            {roleFilter !== "all" && (
+              <span className="text-xs text-slate-500 ml-1">
+                Đang lọc: <span className="font-semibold text-slate-800">{roleFilter}</span>
+              </span>
+            )}
+          </div>
         </div>
 
         {isLoading ? (

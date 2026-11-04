@@ -11,11 +11,18 @@ const {
 } = require("../utils/cognitoService");
 
 // Xác minh ID Token dùng cho bước liên kết tài khoản
-const cognitoIdVerifier = CognitoJwtVerifier.create({
-  userPoolId: process.env.COGNITO_USER_POOL_ID,
-  tokenUse: "id",
-  clientId: process.env.COGNITO_CLIENT_ID,
-});
+let cognitoIdVerifier = null;
+try {
+  if (process.env.COGNITO_USER_POOL_ID && process.env.COGNITO_CLIENT_ID) {
+    cognitoIdVerifier = CognitoJwtVerifier.create({
+      userPoolId: process.env.COGNITO_USER_POOL_ID,
+      tokenUse: "id",
+      clientId: process.env.COGNITO_CLIENT_ID,
+    });
+  }
+} catch (err) {
+  console.warn("Cảnh báo: Không thể khởi tạo CognitoJwtVerifier:", err.message);
+}
 
 /**
  * Hàm đồng bộ tài khoản Cognito với cơ sở dữ liệu SQL Server

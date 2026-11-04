@@ -137,8 +137,9 @@ export default function AdminAnalytics() {
         <div>
           <div className="flex items-center gap-2 mb-1">
 
-            <h1 className="text-2xl font-black text-slate-800 tracking-tight">
-              Trung Tâm Phân Tích & Báo Cáo Kinh Doanh
+            <div className="w-2.5 h-6 rounded-full bg-orange-500" />
+            <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+              Thống kê & Báo cáo kinh doanh
             </h1>
 
           </div>

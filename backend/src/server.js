@@ -13,6 +13,7 @@ const adminUserRoutes = require("./routes/adminUserRoutes");
 const adminOrderRoutes = require("./routes/adminOrderRoutes");
 const adminAnalyticsRoutes = require("./routes/adminAnalyticsRoutes");
 const { sendTechnicalAlert } = require("./utils/snsService");
+const { startOrderWorker } = require("./utils/sqsService");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -78,6 +79,9 @@ connectDB()
     const server = app.listen(PORT, () => {
       console.log(`Server chạy tại http://localhost:${PORT}`);
       console.log(`API base URL: http://localhost:${PORT}/api`);
+
+      // Khởi động AWS SQS Background Worker
+      startOrderWorker();
     });
 
     server.on("error", (err) => {
