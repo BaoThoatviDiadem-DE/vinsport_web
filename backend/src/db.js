@@ -17,6 +17,20 @@ const poolPromise = new sql.ConnectionPool(dbConfig)
   .then(async (pool) => {
     console.log("Kết nối SQL Server thành công");
 
+    // Lắng nghe lỗi runtime của connection pool và cảnh báo qua SNS
+    pool.on("error", (err) => {
+      console.error("Lỗi SQL Pool runtime:", err.message);
+      try {
+        const { sendTechnicalAlert } = require("./utils/snsService");
+        sendTechnicalAlert({
+          level: "CRITICAL",
+          title: "SỰ CỐ RUNTIME CƠ SỞ DỮ LIỆU SQL SERVER",
+          message: `Connection pool phát hiện lỗi runtime: ${err.message}`,
+          error: err,
+        });
+      } catch (_) {}
+    });
+
     // Tự động kiểm tra và tạo cột cognito_sub nếu chưa có
     try {
       await pool.request().query(`
@@ -48,6 +62,19 @@ const poolPromise = new sql.ConnectionPool(dbConfig)
   })
   .catch((error) => {
     console.error("Lỗi kết nối SQL Server:", error.message);
+    try {
+      const { sendTechnicalAlert } = require("./utils/snsService");
+      sendTechnicalAlert({
+        level: "CRITICAL",
+        title: "MẤT KẾT NỐI CƠ SỞ DỮ LIỆU SQL SERVER",
+        message: "Không thể kết nối tới SQL Server khi khởi động hoặc truy vấn.",
+        error: error,
+        context: {
+          server: dbConfig.server,
+          database: dbConfig.database,
+        },
+      });
+    } catch (_) {}
     throw error;
   });
 

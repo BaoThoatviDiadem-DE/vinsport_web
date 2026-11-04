@@ -171,8 +171,8 @@ export const Checkout = () => {
         clearCart();
       } else {
         alert(
-          error?.message ||
-            error?.response?.data?.message ||
+          error?.response?.data?.message ||
+            error?.message ||
             "Lỗi kết nối hệ thống, không thể đặt hàng!"
         );
       }
