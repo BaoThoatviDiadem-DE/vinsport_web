@@ -1,4 +1,4 @@
-﻿-- ======================
+-- ======================
 -- CREATE DATABASE
 -- ======================
 CREATE DATABASE QLbanhangquanao;
@@ -18,10 +18,16 @@ CREATE TABLE Users (
     phone NVARCHAR(15),
     address NVARCHAR(255),
     role NVARCHAR(20) NOT NULL DEFAULT N'user',
+    cognito_sub NVARCHAR(100) NULL,
     created_at DATETIME DEFAULT GETDATE(),
 
     CHECK (role IN (N'admin', N'user'))
 );
+
+-- Index cho tim kiem nhanh theo cognito_sub
+CREATE UNIQUE NONCLUSTERED INDEX IX_Users_cognito_sub
+ON Users (cognito_sub)
+WHERE cognito_sub IS NOT NULL;
 
 -- ======================
 -- BRANDS

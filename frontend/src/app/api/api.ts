@@ -5,7 +5,7 @@ const api = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
-  timeout: 5000,
+  timeout: 15000,
 });
 
 api.interceptors.request.use(
@@ -24,9 +24,10 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    console.error("Lỗi kết nối hệ thống VinSport:", error.message);
+    const errorDetails = error?.response?.data?.message || error.message;
+    console.error("Lỗi kết nối hệ thống VinSport:", errorDetails);
 
-    if (error?.response?.status === 401) {
+    if (error?.response?.status === 401 && !error.config?.url?.includes("/auth/link")) {
       localStorage.removeItem("vinsport_token");
       localStorage.removeItem("vinsport_user");
     }

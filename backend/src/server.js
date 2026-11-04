@@ -19,7 +19,7 @@ const FRONTEND_URL = (process.env.FRONTEND_URL || "http://localhost:5173").repla
 
 app.use(
   cors({
-    origin: FRONTEND_URL,
+    origin: [FRONTEND_URL, "http://localhost:5173", "http://localhost:5174"],
     credentials: true,
   })
 );
@@ -57,9 +57,20 @@ app.use((err, req, res, next) => {
 
 connectDB()
   .then(() => {
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`Server chạy tại http://localhost:${PORT}`);
       console.log(`API base URL: http://localhost:${PORT}/api`);
+    });
+
+    server.on("error", (err) => {
+      if (err.code === "EADDRINUSE") {
+        console.error(`\n❌ CỔNG ${PORT} ĐÃ BỊ CHIẾM BỞI TIẾN TRÌNH KHÁC!`);
+        console.error(`👉 Hãy chạy lệnh sau trên PowerShell để giải phóng cổng:`);
+        console.error(`   Stop-Process -Id (Get-NetTCPConnection -LocalPort ${PORT}).OwningProcess -Force\n`);
+      } else {
+        console.error("Lỗi khởi động server:", err.message);
+      }
+      process.exit(1);
     });
   })
   .catch((err) => {
