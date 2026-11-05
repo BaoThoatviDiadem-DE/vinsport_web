@@ -95,7 +95,7 @@ export const ProductCard = ({ product }: { product: Product }) => {
     e.stopPropagation();
 
     if (!isAuthenticated) {
-      toast.error("Vui lòng đăng nhập để mua hàng!");
+      toast.error("Vui lòng đăng nhập trước khi thêm sản phẩm vào giỏ hàng!");
       navigate("/login");
       return;
     }
@@ -132,6 +132,13 @@ export const ProductCard = ({ product }: { product: Product }) => {
   const handleConfirmAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+
+    if (!isAuthenticated) {
+      toast.error("Vui lòng đăng nhập trước khi thêm sản phẩm vào giỏ hàng!");
+      setIsModalOpen(false);
+      navigate("/login");
+      return;
+    }
 
     if (isOutOfStock) {
       toast.error("Màu sắc và kích cỡ này hiện đang hết hàng!");

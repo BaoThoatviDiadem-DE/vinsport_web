@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
+import toast from "react-hot-toast";
 import {
   Check,
   Truck,
@@ -214,9 +215,10 @@ export const ProductDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addToCart } = useCart();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
   const [product, setProduct] = useState<Product | null>(null);
+  const [recentlyViewed, setRecentlyViewed] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [mainImage, setMainImage] = useState<string>("");
   const [selectedSize, setSelectedSize] = useState<string>("");
@@ -246,6 +248,28 @@ export const ProductDetail = () => {
           setSelectedSize(normalized[0] || "");
           setSelectedColor(data.colors?.[0]?.name || "");
         }
+
+        // Tự động ghi nhận lượt xem và lấy danh sách vừa xem từ Amazon DynamoDB (NoSQL)
+        const safeUserId = user?.id ? `user_${user.id}` : "guest_visitor";
+        api.post("/recently-viewed", {
+          userId: safeUserId,
+          product: {
+            id: data.id,
+            name: data.name,
+            price: data.price,
+            image: data.image || data.images?.[0] || "",
+            category: data.category,
+            brand: data.brand,
+          },
+        }).catch(() => {});
+
+        api.get("/recently-viewed", {
+          params: { userId: safeUserId },
+        }).then((res: any) => {
+          if (res?.products && Array.isArray(res.products)) {
+            setRecentlyViewed(res.products.filter((p: any) => String(p.id) !== String(id)));
+          }
+        }).catch(() => {});
       } catch (error) {
         console.error("Không tải được chi tiết sản phẩm:", error);
 
@@ -463,33 +487,33 @@ export const ProductDetail = () => {
 
   const handleAddToCart = () => {
     if (!isAuthenticated) {
-      alert("Vui lòng đăng nhập để mua hàng!");
+      toast.error("Vui lòng đăng nhập trước khi thêm sản phẩm vào giỏ hàng!");
       navigate("/login");
       return;
     }
 
     if (allSizes.length > 0 && !selectedSize) {
-      alert("Vui lòng chọn kích cỡ!");
+      toast.error("Vui lòng chọn kích cỡ!");
       return;
     }
 
     if (allColors.length > 0 && !selectedColor) {
-      alert("Vui lòng chọn màu sắc!");
+      toast.error("Vui lòng chọn màu sắc!");
       return;
     }
 
     if (product.variants?.length && !currentVariant) {
-      alert("Biến thể sản phẩm này hiện không khả dụng!");
+      toast.error("Biến thể sản phẩm này hiện không khả dụng!");
       return;
     }
 
     if (stock !== null && stock <= 0) {
-      alert("Sản phẩm hiện đã hết hàng!");
+      toast.error("Sản phẩm hiện đã hết hàng!");
       return;
     }
 
     if (stock !== null && quantity > stock) {
-      alert(`Chỉ còn ${stock} sản phẩm trong kho!`);
+      toast.error(`Chỉ còn ${stock} sản phẩm trong kho!`);
       return;
     }
 
@@ -797,6 +821,48 @@ export const ProductDetail = () => {
             </div>
           </div>
         </div>
+
+        {/* ========================================================= */}
+        {/* SẢN PHẨM VỪA XEM GẦN ĐÂY - LƯU TRÊN AMAZON DYNAMODB (NOSQL) */}
+        {/* ========================================================= */}
+        {recentlyViewed.length > 0 && (
+          <div className="mt-16 pt-10 border-t border-slate-200">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-slate-900">
+                Sản phẩm bạn vừa xem
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              {recentlyViewed.map((item) => (
+                <div
+                  key={item.id}
+                  onClick={() => {
+                    navigate(`/products/${item.id}`);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  className="group bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-md hover:border-orange-500 transition-all cursor-pointer flex flex-col"
+                >
+                  <div className="aspect-square bg-slate-50 overflow-hidden relative">
+                    <img
+                      src={item.image || "https://placehold.co/400x400?text=VinSport"}
+                      alt={item.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                  </div>
+                  <div className="p-3 flex-1 flex flex-col justify-between">
+                    <p className="text-xs font-semibold text-slate-800 line-clamp-1 group-hover:text-orange-600 transition-colors">
+                      {item.name}
+                    </p>
+                    <p className="text-xs font-bold text-orange-600 mt-1">
+                      {formatPrice(item.price || 0)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div
