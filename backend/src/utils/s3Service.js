@@ -197,7 +197,16 @@ async function syncSingleProductImage(productId, imageId, imageUrl) {
     });
     clearTimeout(timeoutId);
 
-    if (!response.ok) return;
+    if (!response.ok) {
+      if (imageId) {
+        const pool = await poolPromise;
+        await pool.request()
+          .input("imgId", sql.Int, imageId)
+          .query("DELETE FROM ProductImages WHERE image_id = @imgId");
+        console.warn(`[S3 Image Sync] Link gốc hỏng (HTTP ${response.status}) -> Đã xóa ảnh lỗi SP #${productId} khỏi database.`);
+      }
+      return;
+    }
 
     const contentType = response.headers.get("content-type") || "image/jpeg";
     let ext = "jpg";
@@ -227,7 +236,16 @@ async function syncSingleProductImage(productId, imageId, imageUrl) {
 
     console.log(`[S3 Image Sync] Tự động tải ảnh SP #${productId} lên S3: ${finalUrl}`);
   } catch (err) {
-    console.warn(`[S3 Image Sync] Không thể tải/lưu ảnh cho SP #${productId}:`, err.message);
+    console.warn(`[S3 Image Sync] Link gốc bị lỗi (${err.message}) -> Đang tự động xóa khỏi database...`);
+    if (imageId) {
+      try {
+        const pool = await poolPromise;
+        await pool.request()
+          .input("imgId", sql.Int, imageId)
+          .query("DELETE FROM ProductImages WHERE image_id = @imgId");
+        console.log(`[S3 Image Sync] Đã xóa ảnh lỗi SP #${productId} (image_id: ${imageId}).`);
+      } catch (_) {}
+    }
   }
 }
 

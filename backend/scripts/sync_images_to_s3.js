@@ -16,7 +16,7 @@
 
 const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
-const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, PutObjectCommand, HeadObjectCommand } = require("@aws-sdk/client-s3");
 const { sql, poolPromise } = require("../src/db");
 
 // 1. Đọc cấu hình
@@ -105,6 +105,7 @@ async function syncAllImages() {
   let countSuccess = 0;
   let countSkipped = 0;
   let countUpdatedDomainOnly = 0;
+  let countDeleted = 0;
   let countFailed = 0;
 
   for (let i = 0; i < images.length; i++) {
@@ -112,48 +113,60 @@ async function syncAllImages() {
     const { image_id, product_id, image_url, product_name } = item;
     const progress = `[${i + 1}/${images.length}]`;
 
-    // 1. Trường hợp: Ảnh đã ở trên S3 hoặc CloudFront
+    // 1. Trường hợp: Link không hợp lệ (không phải http/https) -> Xóa luôn khỏi database
+    if (!image_url.startsWith("http://") && !image_url.startsWith("https://")) {
+      console.log(`🗑️ ${progress} SP #${product_id}: Link không hợp lệ (${image_url}) -> Đang tự động xóa khỏi database...`);
+      await pool.request()
+        .input("imgId", sql.Int, image_id)
+        .query("DELETE FROM ProductImages WHERE image_id = @imgId");
+      countDeleted++;
+      continue;
+    }
+
+    // 2. Trường hợp: Ảnh đã ở trên S3 hoặc CloudFront
     const isAlreadyOnS3 = image_url.includes(BUCKET_NAME);
     const isAlreadyOnCurrentCF = CLOUDFRONT_DOMAIN && image_url.includes(CLOUDFRONT_DOMAIN);
 
-    // Nếu đã ở CloudFront hiện tại thì bỏ qua luôn
-    if (isAlreadyOnCurrentCF) {
-      console.log(`⏩ ${progress} SP #${product_id} (${product_name || "SP"}): Đã ở CloudFront, bỏ qua.`);
-      countSkipped++;
-      continue;
-    }
-
-    // Nếu ảnh đã ở S3 và bây giờ có CloudFront mới -> Chỉ cần UPDATE lại URL sang CloudFront, không cần tải lại file!
-    if (isAlreadyOnS3 && CLOUDFRONT_DOMAIN) {
+    // Nếu ảnh đã ở S3/CloudFront, kiểm tra nhanh xem file thật có tồn tại trên S3 không
+    if (isAlreadyOnS3) {
       const pathMatch = image_url.match(/images\/products\/[^\s?#]+/);
       if (pathMatch) {
         const s3Key = pathMatch[0];
-        const newCfUrl = `https://${CLOUDFRONT_DOMAIN}/${s3Key}`;
-        await pool.request()
-          .input("imgId", sql.Int, image_id)
-          .input("newUrl", sql.NVarChar, newCfUrl)
-          .query("UPDATE ProductImages SET image_url = @newUrl WHERE image_id = @imgId");
+        try {
+          await s3Client.send(new HeadObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: s3Key,
+          }));
+        } catch (headErr) {
+          // File không tồn tại trên S3 (lỗi 404) -> Xóa khỏi database
+          console.log(`🗑️ ${progress} SP #${product_id}: File không tồn tại trên S3 (${s3Key}) -> Đang tự động xóa khỏi database...`);
+          await pool.request()
+            .input("imgId", sql.Int, image_id)
+            .query("DELETE FROM ProductImages WHERE image_id = @imgId");
+          countDeleted++;
+          continue;
+        }
 
-        console.log(`🔄 ${progress} SP #${product_id}: Cập nhật link sang CloudFront mới -> ${newCfUrl}`);
-        countUpdatedDomainOnly++;
-        continue;
+        // Nếu file có thật trên S3 và có CloudFront mới -> Cập nhật domain
+        if (CLOUDFRONT_DOMAIN && !isAlreadyOnCurrentCF) {
+          const newCfUrl = `https://${CLOUDFRONT_DOMAIN}/${s3Key}`;
+          await pool.request()
+            .input("imgId", sql.Int, image_id)
+            .input("newUrl", sql.NVarChar, newCfUrl)
+            .query("UPDATE ProductImages SET image_url = @newUrl WHERE image_id = @imgId");
+
+          console.log(`🔄 ${progress} SP #${product_id}: Cập nhật link sang CloudFront mới -> ${newCfUrl}`);
+          countUpdatedDomainOnly++;
+          continue;
+        }
       }
-    }
 
-    // Nếu đã ở S3 và chưa có CloudFront -> đã sẵn sàng trên S3
-    if (isAlreadyOnS3 && !CLOUDFRONT_DOMAIN) {
-      console.log(`⏩ ${progress} SP #${product_id}: Đã ở trên S3 (${image_url}), bỏ qua.`);
+      console.log(`⏩ ${progress} SP #${product_id} (${product_name || "SP"}): Đã sẵn sàng trên S3/CloudFront, bỏ qua.`);
       countSkipped++;
       continue;
     }
 
-    // 2. Trường hợp: Link bên ngoài -> Tải về và đẩy lên S3
-    if (!image_url.startsWith("http://") && !image_url.startsWith("https://")) {
-      console.log(`⚠️ ${progress} SP #${product_id}: Link không hợp lệ (${image_url}), bỏ qua.`);
-      countSkipped++;
-      continue;
-    }
-
+    // 3. Trường hợp: Link bên ngoài -> Tải về và đẩy lên S3
     try {
       console.log(`⏳ ${progress} Đang tải SP #${product_id} (${product_name || "SP"})...`);
       
@@ -207,8 +220,17 @@ async function syncAllImages() {
       countSuccess++;
 
     } catch (err) {
-      console.error(`❌ ${progress} SP #${product_id}: Thất bại (${err.message}) - Giữ nguyên link cũ.`);
-      countFailed++;
+      console.warn(`🗑️ ${progress} SP #${product_id}: Link gốc bị hỏng/chết (${err.message}) -> Đang tự động XÓA khỏi database...`);
+      try {
+        await pool.request()
+          .input("imgId", sql.Int, image_id)
+          .query("DELETE FROM ProductImages WHERE image_id = @imgId");
+        console.log(`   -> Đã xóa thành công ảnh lỗi (image_id: ${image_id}).`);
+        countDeleted++;
+      } catch (delErr) {
+        console.error(`   -> Lỗi khi xóa: ${delErr.message}`);
+        countFailed++;
+      }
     }
   }
 
@@ -217,10 +239,13 @@ async function syncAllImages() {
   console.log("=====================================================================");
   console.log(`✨ Thành công đẩy mới lên S3:       ${countSuccess} ảnh`);
   console.log(`🔄 Cập nhật tên miền CloudFront:     ${countUpdatedDomainOnly} ảnh`);
-  console.log(`⏩ Đã có sẵn (bỏ qua):              ${countSkipped} ảnh`);
-  console.log(`❌ Lỗi (link ngoài hỏng/chết):      ${countFailed} ảnh`);
+  console.log(`⏩ Đã có sẵn trên S3 (bỏ qua):      ${countSkipped} ảnh`);
+  console.log(`🗑️ Đã tự động XÓA do link hỏng:     ${countDeleted} ảnh`);
+  if (countFailed > 0) {
+    console.log(`❌ Lỗi hệ thống:                    ${countFailed} ảnh`);
+  }
   console.log("=====================================================================");
-  console.log("👉 Dữ liệu trong database đã được cập nhật chuẩn chỉnh!");
+  console.log("👉 Cơ sở dữ liệu SQL Server đã được làm sạch hoàn toàn!");
 
   process.exit(0);
 }
