@@ -170,9 +170,71 @@ async function deleteFromS3(type, id) {
   }
 }
 
+/**
+ * Tự động tải ảnh từ URL bên ngoài và lưu trữ lên Amazon S3 (images/products/), cập nhật lại DB
+ */
+async function syncSingleProductImage(productId, imageId, imageUrl) {
+  if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) return;
+  if (!imageUrl || (!imageUrl.startsWith("http://") && !imageUrl.startsWith("https://"))) return;
+
+  const bucketName = (process.env.AWS_BUCKET_NAME || "").trim();
+  const region = (process.env.AWS_REGION || "ap-southeast-1").trim();
+  const cfDomain = (process.env.AWS_CLOUDFRONT_DOMAIN || "").trim().replace(/^https?:\/\//i, "").replace(/\/$/, "");
+
+  // Nếu ảnh đã nằm trên S3 hoặc CloudFront thì bỏ qua
+  if (bucketName && imageUrl.includes(bucketName)) return;
+  if (cfDomain && imageUrl.includes(cfDomain)) return;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    const response = await fetch(imageUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) return;
+
+    const contentType = response.headers.get("content-type") || "image/jpeg";
+    let ext = "jpg";
+    if (contentType.includes("png") || imageUrl.includes(".png")) ext = "png";
+    else if (contentType.includes("webp") || imageUrl.includes(".webp")) ext = "webp";
+    else if (contentType.includes("gif") || imageUrl.includes(".gif")) ext = "gif";
+
+    const s3Key = `images/products/product_${productId}_${imageId || Date.now()}.${ext}`;
+    const arrayBuffer = await response.arrayBuffer();
+
+    await s3Client.send(new PutObjectCommand({
+      Bucket: bucketName,
+      Key: s3Key,
+      Body: Buffer.from(arrayBuffer),
+      ContentType: contentType,
+    }));
+
+    const finalUrl = cfDomain
+      ? `https://${cfDomain}/${s3Key}`
+      : `https://${bucketName}.s3.${region}.amazonaws.com/${s3Key}`;
+
+    const pool = await poolPromise;
+    await pool.request()
+      .input("imgId", sql.Int, imageId)
+      .input("newUrl", sql.NVarChar, finalUrl)
+      .query("UPDATE ProductImages SET image_url = @newUrl WHERE image_id = @imgId");
+
+    console.log(`[S3 Image Sync] Tự động tải ảnh SP #${productId} lên S3: ${finalUrl}`);
+  } catch (err) {
+    console.warn(`[S3 Image Sync] Không thể tải/lưu ảnh cho SP #${productId}:`, err.message);
+  }
+}
+
 module.exports = {
   uploadOrderToS3,
   uploadUserToS3,
   uploadProductToS3,
   deleteFromS3,
+  syncSingleProductImage,
 };

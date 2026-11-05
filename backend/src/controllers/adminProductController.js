@@ -1,5 +1,5 @@
 const { sql, poolPromise } = require("../db");
-const { uploadProductToS3, deleteFromS3 } = require("../utils/s3Service");
+const { uploadProductToS3, deleteFromS3, syncSingleProductImage } = require("../utils/s3Service");
 
 function normalizeSizes(sizes) {
   if (Array.isArray(sizes)) {
@@ -229,14 +229,18 @@ const createAdminProduct = async (req, res) => {
 
     const productId = insertProduct.recordset[0].product_id;
 
-    if (image && String(image).trim()) {
-      await new sql.Request(transaction)
+    let insertedImgId = null;
+    const rawImage = image ? String(image).trim() : "";
+    if (rawImage) {
+      const imgRes = await new sql.Request(transaction)
         .input("product_id", sql.Int, productId)
-        .input("image_url", sql.NVarChar, String(image).trim())
+        .input("image_url", sql.NVarChar, rawImage)
         .query(`
           INSERT INTO ProductImages (product_id, image_url)
+          OUTPUT INSERTED.image_id AS image_id
           VALUES (@product_id, @image_url)
         `);
+      insertedImgId = imgRes.recordset?.[0]?.image_id;
     }
 
     const sizeNames = normalizeSizes(sizes);
@@ -271,6 +275,9 @@ const createAdminProduct = async (req, res) => {
     await transaction.commit();
 
     uploadProductToS3(productId).catch(console.error);
+    if (insertedImgId && rawImage) {
+      syncSingleProductImage(productId, insertedImgId, rawImage).catch(console.error);
+    }
 
     return res.status(201).json({
       message: "Thêm sản phẩm thành công",
@@ -358,14 +365,18 @@ const updateAdminProduct = async (req, res) => {
       .input("product_id", sql.Int, productId)
       .query(`DELETE FROM ProductImages WHERE product_id = @product_id`);
 
-    if (image && String(image).trim()) {
-      await new sql.Request(transaction)
+    let updatedImgId = null;
+    const rawImage = image ? String(image).trim() : "";
+    if (rawImage) {
+      const imgRes = await new sql.Request(transaction)
         .input("product_id", sql.Int, productId)
-        .input("image_url", sql.NVarChar, String(image).trim())
+        .input("image_url", sql.NVarChar, rawImage)
         .query(`
           INSERT INTO ProductImages (product_id, image_url)
+          OUTPUT INSERTED.image_id AS image_id
           VALUES (@product_id, @image_url)
         `);
+      updatedImgId = imgRes.recordset?.[0]?.image_id;
     }
 
     await new sql.Request(transaction)
@@ -404,6 +415,9 @@ const updateAdminProduct = async (req, res) => {
     await transaction.commit();
 
     uploadProductToS3(productId).catch(console.error);
+    if (updatedImgId && rawImage) {
+      syncSingleProductImage(productId, updatedImgId, rawImage).catch(console.error);
+    }
 
     return res.json({ message: "Cập nhật sản phẩm thành công" });
   } catch (error) {
@@ -475,14 +489,18 @@ async function insertOrUpdateProductData(transaction, item) {
 
   const productId = insertProduct.recordset[0].product_id;
 
-  if (item.image && String(item.image).trim()) {
-    await new sql.Request(transaction)
+  let insertedImageId = null;
+  const rawImage = item.image ? String(item.image).trim() : "";
+  if (rawImage) {
+    const imgResult = await new sql.Request(transaction)
       .input("product_id", sql.Int, productId)
-      .input("image_url", sql.NVarChar, String(item.image).trim())
+      .input("image_url", sql.NVarChar, rawImage)
       .query(`
         INSERT INTO ProductImages (product_id, image_url)
+        OUTPUT INSERTED.image_id AS image_id
         VALUES (@product_id, @image_url)
       `);
+    insertedImageId = imgResult.recordset?.[0]?.image_id;
   }
 
   const sizeNames = normalizeSizes(item.sizes);
@@ -516,7 +534,7 @@ async function insertOrUpdateProductData(transaction, item) {
     }
   }
 
-  return productId;
+  return { productId, imageId: insertedImageId, rawImage };
 }
 
 const importAdminProducts = async (req, res) => {
@@ -541,13 +559,16 @@ const importAdminProducts = async (req, res) => {
       await transaction.begin();
       started = true;
 
-      const productId = await insertOrUpdateProductData(transaction, item);
+      const { productId, imageId, rawImage } = await insertOrUpdateProductData(transaction, item);
       await transaction.commit();
       started = false;
 
       createdIds.push(productId);
       importedCount++;
       uploadProductToS3(productId).catch(console.error);
+      if (imageId && rawImage) {
+        syncSingleProductImage(productId, imageId, rawImage).catch(console.error);
+      }
     } catch (err) {
       if (started) {
         try { await transaction.rollback(); } catch {}
