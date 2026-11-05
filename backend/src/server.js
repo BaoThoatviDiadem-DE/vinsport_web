@@ -12,8 +12,12 @@ const adminProductRoutes = require("./routes/adminProductRoutes");
 const adminUserRoutes = require("./routes/adminUserRoutes");
 const adminOrderRoutes = require("./routes/adminOrderRoutes");
 const adminAnalyticsRoutes = require("./routes/adminAnalyticsRoutes");
+const recentlyViewedRoutes = require("./routes/recentlyViewedRoutes");
+const cartRoutes = require("./routes/cartRoutes");
+const otpRoutes = require("./routes/otpRoutes");
 const { sendTechnicalAlert } = require("./utils/snsService");
 const { startOrderWorker } = require("./utils/sqsService");
+const { ensureAllDynamoTables } = require("./utils/dynamoService");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -43,6 +47,9 @@ app.use("/api/admin/products", adminProductRoutes);
 app.use("/api/admin/users", adminUserRoutes);
 app.use("/api/admin/orders", adminOrderRoutes);
 app.use("/api/admin/analytics", adminAnalyticsRoutes);
+app.use("/api/recently-viewed", recentlyViewedRoutes);
+app.use("/api", cartRoutes);
+app.use("/api", otpRoutes);
 
 app.use((req, res) => {
   res.status(404).json({
@@ -82,6 +89,11 @@ connectDB()
 
       // Khởi động AWS SQS Background Worker
       startOrderWorker();
+
+      // Tự động kiểm tra & khởi tạo tất cả các bảng Amazon DynamoDB
+      ensureAllDynamoTables().catch((err) => {
+        console.warn("[DynamoDB] Khởi tạo các bảng thất bại:", err.message);
+      });
     });
 
     server.on("error", (err) => {
