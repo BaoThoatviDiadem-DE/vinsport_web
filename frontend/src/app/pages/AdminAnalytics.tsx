@@ -137,8 +137,9 @@ export default function AdminAnalytics() {
         <div>
           <div className="flex items-center gap-2 mb-1">
 
-            <h1 className="text-2xl font-black text-slate-800 tracking-tight">
-              Trung Tâm Phân Tích & Báo Cáo Kinh Doanh
+            <div className="w-2.5 h-6 rounded-full bg-orange-500" />
+            <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+              Thống kê & Báo cáo kinh doanh
             </h1>
 
           </div>
@@ -180,12 +181,12 @@ export default function AdminAnalytics() {
           <button
             onClick={() => fetchAnalytics(range, true)}
             disabled={loading || refreshing}
-            className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-medium text-sm rounded-xl shadow-sm transition-all active:scale-95 disabled:opacity-50"
+            className="flex items-center justify-center p-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl shadow-sm transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+            title="Làm mới số liệu"
           >
             <RefreshCw
               className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
             />
-            <span>Làm mới số liệu</span>
           </button>
         </div>
       </div>

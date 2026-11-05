@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router";
 import {
   Home,
@@ -22,22 +22,38 @@ import { useAuth } from "../contexts/AuthContext";
 export const Navbar = () => {
   const { totalItems } = useCart();
   const { isAuthenticated, user, logout } = useAuth();
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Đóng sidebar khi chuyển trang
+  useEffect(() => {
+    setIsSidebarOpen(false);
+  }, [location.pathname]);
+
+  // Đóng sidebar khi nhấn phím Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isSidebarOpen) {
+        setIsSidebarOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isSidebarOpen]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
       navigate(`/products?search=${encodeURIComponent(searchQuery.trim())}`);
-      setIsMobileOpen(false);
+      setIsSidebarOpen(false);
     }
   };
 
   const handleLogout = () => {
     logout();
-    setIsMobileOpen(false);
+    setIsSidebarOpen(false);
     navigate("/");
   };
 
@@ -94,40 +110,28 @@ export const Navbar = () => {
 
   return (
     <>
-      {/* CSS đảm bảo khu vực main & footer luôn lùi sang phải 16rem (256px) trên màn hình máy tính */}
-      <style>{`
-        @media (min-width: 768px) {
-          main {
-            margin-left: 16rem !important;
-          }
-          footer {
-            margin-left: 16rem !important;
-          }
-        }
-      `}</style>
-
-      {/* Lớp nền mờ khi mở menu trên điện thoại */}
-      {isMobileOpen && (
+      {/* Lớp nền mờ khi mở menu sidebar */}
+      {isSidebarOpen && (
         <div
-          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 md:hidden transition-opacity"
-          onClick={() => setIsMobileOpen(false)}
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 transition-opacity"
+          onClick={() => setIsSidebarOpen(false)}
           aria-hidden="true"
         />
       )}
 
       {/* =========================================================================
-          THANH ĐIỀU HƯỚNG DỌC Ở BÊN TRÁI (SIDEBAR)
+          THANH ĐIỀU HƯỚNG DỌC (SIDEBAR DRAWER) - THU GỌN VÀ CHỈ MỞ KHI BẤM ICON 3 GẠCH
          ========================================================================= */}
       <aside
-        className={`fixed top-0 left-0 z-50 md:z-40 h-screen w-64 bg-white border-r border-slate-100 flex flex-col transition-transform duration-300 ease-in-out select-none ${
-          isMobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full md:translate-x-0"
+        className={`fixed top-0 left-0 z-50 h-screen w-72 bg-white border-r border-slate-100 flex flex-col transition-transform duration-300 ease-in-out select-none shadow-2xl ${
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        {/* Logo VinSport */}
+        {/* Logo VinSport & Nút đóng */}
         <div className="h-16 px-5 border-b border-slate-100 flex items-center justify-between shrink-0">
           <Link
             to="/"
-            onClick={() => setIsMobileOpen(false)}
+            onClick={() => setIsSidebarOpen(false)}
             className="flex items-center gap-2.5 group"
           >
             <div className="w-9 h-9 rounded-xl bg-orange-600 flex items-center justify-center text-white shadow-sm shadow-orange-500/30 group-hover:scale-105 transition-transform">
@@ -143,11 +147,12 @@ export const Navbar = () => {
             </div>
           </Link>
 
-          {/* Nút đóng trên mobile */}
+          {/* Nút đóng sidebar */}
           <button
-            onClick={() => setIsMobileOpen(false)}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 md:hidden"
+            onClick={() => setIsSidebarOpen(false)}
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
             aria-label="Đóng menu"
+            title="Đóng menu"
           >
             <X className="w-5 h-5" />
           </button>
@@ -170,7 +175,7 @@ export const Navbar = () => {
                   <Link
                     key={item.path}
                     to={item.path}
-                    onClick={() => setIsMobileOpen(false)}
+                    onClick={() => setIsSidebarOpen(false)}
                     className={`group flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-[15px] transition-all duration-150 ${
                       active
                         ? "bg-[#fff1ed] text-orange-600 font-semibold"
@@ -192,7 +197,7 @@ export const Navbar = () => {
               {/* Giỏ hàng */}
               <Link
                 to="/cart"
-                onClick={() => setIsMobileOpen(false)}
+                onClick={() => setIsSidebarOpen(false)}
                 className={`group flex items-center justify-between px-3.5 py-2.5 rounded-xl text-[15px] transition-all duration-150 ${
                   isActive("/cart")
                     ? "bg-[#fff1ed] text-orange-600 font-semibold"
@@ -238,7 +243,7 @@ export const Navbar = () => {
                     <Link
                       key={item.path}
                       to={item.path}
-                      onClick={() => setIsMobileOpen(false)}
+                      onClick={() => setIsSidebarOpen(false)}
                       className={`group flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-[15px] transition-all duration-150 ${
                         active
                           ? "bg-[#fff1ed] text-orange-600 font-semibold"
@@ -260,65 +265,30 @@ export const Navbar = () => {
             </div>
           )}
         </div>
-
-        {/* Khối tài khoản người dùng ở góc dưới */}
-        <div className="p-3 border-t border-slate-100 bg-slate-50/50 shrink-0">
-          {isAuthenticated ? (
-            <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white border border-slate-100 shadow-2xs">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-sm shrink-0">
-                  {user?.name ? user.name.charAt(0).toUpperCase() : "U"}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-slate-800 truncate">
-                    {user?.name}
-                  </p>
-                  <p className="text-[10px] text-slate-400 capitalize truncate">
-                    {user?.role === "admin" ? "Quản trị viên" : "Khách hàng"}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                onClick={handleLogout}
-                title="Đăng xuất"
-                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
-            <Link
-              to="/login"
-              onClick={() => setIsMobileOpen(false)}
-              className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors shadow-2xs"
-            >
-              <User className="w-4 h-4 text-orange-600" />
-              <span>Đăng nhập tài khoản</span>
-            </Link>
-          )}
-        </div>
       </aside>
 
       {/* =========================================================================
           THANH HEADER TRÊN CÙNG CỦA KHU VỰC NỘI DUNG (TOPBAR)
          ========================================================================= */}
-      <header className="sticky top-0 z-30 h-16 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 md:px-8 flex items-center justify-between gap-4 md:ml-64">
-        {/* Nút bật menu & Logo trên Mobile */}
+      <header className="sticky top-0 z-30 h-16 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 md:px-8 flex items-center justify-between gap-4">
+        {/* Nút bật menu (3 gạch) & Logo VinSport */}
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setIsMobileOpen((prev) => !prev)}
-            className="p-2 -ml-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl md:hidden transition-colors"
-            aria-label="Mở menu"
+            onClick={() => setIsSidebarOpen((prev) => !prev)}
+            className="p-2 -ml-2 text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer flex items-center justify-center"
+            aria-label="Mở menu điều hướng"
+            title="Mở menu điều hướng"
           >
             <Menu className="w-5 h-5" />
           </button>
 
           <Link
             to="/"
-            className="flex items-center gap-2 text-xl font-black italic tracking-tighter text-slate-900 md:hidden"
+            className="flex items-center gap-2 text-xl font-black italic tracking-tighter text-slate-900 group"
           >
-            <Package className="w-6 h-6 text-orange-600" />
+            <div className="w-8 h-8 rounded-xl bg-orange-600 flex items-center justify-center text-white shadow-xs group-hover:scale-105 transition-transform">
+              <Package className="w-4 h-4" />
+            </div>
             <span>
               Vin<span className="text-orange-600">Sport</span>
             </span>

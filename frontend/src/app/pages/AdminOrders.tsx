@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Search, Filter, RefreshCw } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Search, Filter, RefreshCw, ChevronDown, Loader2, Edit3, Check } from "lucide-react";
 import api from "../api/api";
 
 type PaymentMethod = "cod" | "banking" | "momo" | string;
@@ -39,6 +39,16 @@ const ORDER_STATUS_OPTIONS = [
   { value: "completed", label: "Hoàn thành" },
   { value: "cancelled", label: "Đã hủy" },
 ];
+
+function removeVietnameseTones(str: string): string {
+  if (!str) return "";
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "d")
+    .toLowerCase();
+}
 
 function toArray(data: any): any[] {
   if (Array.isArray(data)) return data;
@@ -95,24 +105,55 @@ function orderStatusLabel(status: string) {
 }
 
 function paymentStatusClass(status: string) {
-  if (status === "paid") return "bg-green-100 text-green-700 border-green-200";
-  if (status === "failed") return "bg-red-100 text-red-700 border-red-200";
-  return "bg-orange-100 text-orange-700 border-orange-200";
+  if (status === "paid") return "bg-green-100 text-green-700 border-green-300 hover:bg-green-200 focus:ring-green-400";
+  if (status === "failed") return "bg-red-100 text-red-700 border-red-300 hover:bg-red-200 focus:ring-red-400";
+  return "bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-200 focus:ring-orange-400";
 }
 
 function orderStatusClass(status: string) {
-  if (status === "completed") return "bg-green-100 text-green-700 border-green-200";
-  if (status === "confirmed") return "bg-emerald-100 text-emerald-700 border-emerald-200";
-  if (status === "shipping") return "bg-blue-100 text-blue-700 border-blue-200";
-  if (status === "cancelled") return "bg-red-100 text-red-700 border-red-200";
-  return "bg-slate-100 text-slate-700 border-slate-200";
+  if (status === "completed") return "bg-green-100 text-green-700 border-green-300 hover:bg-green-200 focus:ring-green-400";
+  if (status === "confirmed") return "bg-emerald-100 text-emerald-700 border-emerald-300 hover:bg-emerald-200 focus:ring-emerald-400";
+  if (status === "shipping") return "bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200 focus:ring-blue-400";
+  if (status === "cancelled") return "bg-red-100 text-red-700 border-red-300 hover:bg-red-200 focus:ring-red-400";
+  return "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200 focus:ring-slate-400";
 }
 
 export default function AdminOrders() {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [keyword, setKeyword] = useState("");
-  const [searchField, setSearchField] = useState<SearchField>("all");
+  const [isEditingTable, setIsEditingTable] = useState(false);
+  const [originalOrders, setOriginalOrders] = useState<AdminOrder[]>([]);
+  const [idSearch, setIdSearch] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [paymentMethodSearch, setPaymentMethodSearch] = useState("");
+
+  // State tạm thời khi đang nhập trong popup (chỉ áp dụng khi bấm Đồng ý hoặc Enter)
+  const [tempIdSearch, setTempIdSearch] = useState("");
+  const [tempCustomerSearch, setTempCustomerSearch] = useState("");
+  const [tempPaymentMethodSearch, setTempPaymentMethodSearch] = useState("");
+
+  const handleApplyIdSearch = () => {
+    setIdSearch(tempIdSearch.trim());
+    setIdSearchOpen(false);
+  };
+
+  const handleApplyCustomerSearch = () => {
+    setCustomerSearch(tempCustomerSearch.trim());
+    setCustomerSearchOpen(false);
+  };
+
+  const handleApplyPaymentMethodSearch = () => {
+    setPaymentMethodSearch(tempPaymentMethodSearch.trim());
+    setPaymentMethodSearchOpen(false);
+  };
+
+  const [idSearchOpen, setIdSearchOpen] = useState(false);
+  const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
+  const [paymentMethodSearchOpen, setPaymentMethodSearchOpen] = useState(false);
+
+  const idSearchRef = useRef<HTMLDivElement>(null);
+  const customerSearchRef = useRef<HTMLDivElement>(null);
+  const paymentMethodSearchRef = useRef<HTMLDivElement>(null);
 
   const [paymentStatusFilters, setPaymentStatusFilters] = useState<string[]>([]);
   const [orderStatusFilters, setOrderStatusFilters] = useState<string[]>([]);
@@ -124,6 +165,46 @@ export default function AdminOrders() {
   const [orderFilterKeyword, setOrderFilterKeyword] = useState("");
 
   const [savingId, setSavingId] = useState<number | string | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updatingField, setUpdatingField] = useState<string | null>(null);
+
+  const paymentFilterRef = useRef<HTMLDivElement>(null);
+  const orderFilterRef = useRef<HTMLDivElement>(null);
+
+  const closeOtherPopovers = (except?: string) => {
+    if (except !== "id") setIdSearchOpen(false);
+    if (except !== "customer") setCustomerSearchOpen(false);
+    if (except !== "paymentMethod") setPaymentMethodSearchOpen(false);
+    if (except !== "paymentStatus") setPaymentFilterOpen(false);
+    if (except !== "orderStatus") setOrderFilterOpen(false);
+  };
+
+  // Tự động đóng menu bộ lọc và tìm kiếm khi click chuột ra ngoài
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Node;
+      if (idSearchRef.current && !idSearchRef.current.contains(target)) {
+        setIdSearchOpen(false);
+      }
+      if (customerSearchRef.current && !customerSearchRef.current.contains(target)) {
+        setCustomerSearchOpen(false);
+      }
+      if (paymentMethodSearchRef.current && !paymentMethodSearchRef.current.contains(target)) {
+        setPaymentMethodSearchOpen(false);
+      }
+      if (paymentFilterRef.current && !paymentFilterRef.current.contains(target)) {
+        setPaymentFilterOpen(false);
+      }
+      if (orderFilterRef.current && !orderFilterRef.current.contains(target)) {
+        setOrderFilterOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const loadOrders = async () => {
     try {
@@ -145,23 +226,40 @@ export default function AdminOrders() {
   }, []);
 
   const filteredPaymentOptions = useMemo(() => {
-    const q = paymentFilterKeyword.trim().toLowerCase();
-    if (!q) return PAYMENT_STATUS_OPTIONS;
-    return PAYMENT_STATUS_OPTIONS.filter(
-      (item) =>
-        item.label.toLowerCase().includes(q) ||
-        item.value.toLowerCase().includes(q)
-    );
+    const qRaw = paymentFilterKeyword.trim().toLowerCase();
+    const qClean = removeVietnameseTones(qRaw);
+    if (!qRaw) return PAYMENT_STATUS_OPTIONS;
+    return PAYMENT_STATUS_OPTIONS.filter((item) => {
+      const labelRaw = item.label.toLowerCase();
+      const labelClean = removeVietnameseTones(labelRaw);
+      const val = item.value.toLowerCase();
+      return labelRaw.includes(qRaw) || labelClean.includes(qClean) || val.includes(qRaw);
+    });
   }, [paymentFilterKeyword]);
 
+  const shippingOrdersCount = useMemo(
+    () => orders.filter((o) => o.orderStatus?.toLowerCase() === "shipping").length,
+    [orders]
+  );
+  const completedOrdersCount = useMemo(
+    () => orders.filter((o) => o.orderStatus?.toLowerCase() === "completed").length,
+    [orders]
+  );
+  const cancelledOrdersCount = useMemo(
+    () => orders.filter((o) => o.orderStatus?.toLowerCase() === "cancelled").length,
+    [orders]
+  );
+
   const filteredOrderOptions = useMemo(() => {
-    const q = orderFilterKeyword.trim().toLowerCase();
-    if (!q) return ORDER_STATUS_OPTIONS;
-    return ORDER_STATUS_OPTIONS.filter(
-      (item) =>
-        item.label.toLowerCase().includes(q) ||
-        item.value.toLowerCase().includes(q)
-    );
+    const qRaw = orderFilterKeyword.trim().toLowerCase();
+    const qClean = removeVietnameseTones(qRaw);
+    if (!qRaw) return ORDER_STATUS_OPTIONS;
+    return ORDER_STATUS_OPTIONS.filter((item) => {
+      const labelRaw = item.label.toLowerCase();
+      const labelClean = removeVietnameseTones(labelRaw);
+      const val = item.value.toLowerCase();
+      return labelRaw.includes(qRaw) || labelClean.includes(qClean) || val.includes(qRaw);
+    });
   }, [orderFilterKeyword]);
 
   const togglePaymentStatusFilter = (value: string) => {
@@ -181,49 +279,78 @@ export default function AdminOrders() {
   };
 
   const clearAllFilters = () => {
-    setKeyword("");
-    setSearchField("all");
+    setIdSearch("");
+    setCustomerSearch("");
+    setPaymentMethodSearch("");
     setPaymentStatusFilters([]);
     setOrderStatusFilters([]);
     setPaymentFilterKeyword("");
     setOrderFilterKeyword("");
+
+    setTempIdSearch("");
+    setTempCustomerSearch("");
+    setTempPaymentMethodSearch("");
+
+    setIdSearchOpen(false);
+    setCustomerSearchOpen(false);
+    setPaymentMethodSearchOpen(false);
+    setPaymentFilterOpen(false);
+    setOrderFilterOpen(false);
   };
 
+  const hasActiveFilters =
+    Boolean(idSearch.trim()) ||
+    Boolean(customerSearch.trim()) ||
+    Boolean(paymentMethodSearch.trim()) ||
+    paymentStatusFilters.length > 0 ||
+    orderStatusFilters.length > 0;
+
   const filteredOrders = useMemo(() => {
-    const q = keyword.trim().toLowerCase();
+    const idQ = idSearch.trim().toLowerCase().replace(/^#/, "");
+    const custQRaw = customerSearch.trim().toLowerCase();
+    const custQClean = removeVietnameseTones(custQRaw);
+    const custQDigits = custQRaw.replace(/\D/g, "");
+
+    const methodQRaw = paymentMethodSearch.trim().toLowerCase();
+    const methodQClean = removeVietnameseTones(methodQRaw);
 
     return orders.filter((order) => {
       const orderId = String(order.id).toLowerCase();
-      const customerName = String(order.customerName ?? "").toLowerCase();
-      const phone = String(order.phone ?? "").toLowerCase();
-      const paymentMethod = String(order.paymentMethod ?? "").toLowerCase();
+      const customerName = String(order.customerName ?? "");
+      const phone = String(order.phone ?? "");
+      const address = String(order.address ?? "");
+      const paymentMethod = String(order.paymentMethod ?? "");
+      const paymentMethodVi = formatPaymentMethod(order.paymentMethod);
 
-      let matchesSearch = true;
+      const matchesId = !idQ || orderId.includes(idQ);
 
-      if (q) {
-        switch (searchField) {
-          case "id":
-            matchesSearch = orderId.includes(q);
-            break;
-          case "customerName":
-            matchesSearch = customerName.includes(q);
-            break;
-          case "phone":
-            matchesSearch = phone.includes(q);
-            break;
-          case "paymentMethod":
-            matchesSearch = paymentMethod.includes(q);
-            break;
-          case "all":
-          default:
-            matchesSearch =
-              orderId.includes(q) ||
-              customerName.includes(q) ||
-              phone.includes(q) ||
-              paymentMethod.includes(q);
-            break;
-        }
-      }
+      const nameRaw = customerName.toLowerCase();
+      const nameClean = removeVietnameseTones(customerName);
+      const phoneRaw = phone.toLowerCase();
+      const phoneDigits = phoneRaw.replace(/\D/g, "");
+      const addressRaw = address.toLowerCase();
+      const addressClean = removeVietnameseTones(address);
+
+      const matchesCustomer =
+        !custQRaw ||
+        nameRaw.includes(custQRaw) ||
+        nameClean.includes(custQClean) ||
+        (custQDigits.length > 0 && phoneDigits.includes(custQDigits)) ||
+        phoneRaw.includes(custQRaw) ||
+        addressRaw.includes(custQRaw) ||
+        addressClean.includes(custQClean);
+
+      const methodRaw = paymentMethod.toLowerCase();
+      const methodViRaw = paymentMethodVi.toLowerCase();
+      const methodClean = removeVietnameseTones(paymentMethod);
+      const methodViClean = removeVietnameseTones(paymentMethodVi);
+
+      const matchesMethod =
+        !methodQRaw ||
+        methodRaw.includes(methodQRaw) ||
+        methodViRaw.includes(methodQRaw) ||
+        methodClean.includes(methodQClean) ||
+        methodViClean.includes(methodQClean);
 
       const matchesPaymentStatus =
         paymentStatusFilters.length === 0 ||
@@ -233,9 +360,22 @@ export default function AdminOrders() {
         orderStatusFilters.length === 0 ||
         orderStatusFilters.includes(order.orderStatus);
 
-      return matchesSearch && matchesPaymentStatus && matchesOrderStatus;
+      return (
+        matchesId &&
+        matchesCustomer &&
+        matchesMethod &&
+        matchesPaymentStatus &&
+        matchesOrderStatus
+      );
     });
-  }, [orders, keyword, searchField, paymentStatusFilters, orderStatusFilters]);
+  }, [
+    orders,
+    idSearch,
+    customerSearch,
+    paymentMethodSearch,
+    paymentStatusFilters,
+    orderStatusFilters,
+  ]);
 
   const handleFieldChange = (
     id: number | string,
@@ -249,349 +389,699 @@ export default function AdminOrders() {
     );
   };
 
-  const handleUpdateOrder = async (order: AdminOrder) => {
-    try {
-      setSavingId(order.id);
+  const handleStatusChange = async (
+    orderId: number | string,
+    field: "paymentStatus" | "orderStatus",
+    newValue: string
+  ) => {
+    const prevOrders = [...orders];
+    const targetOrder = orders.find((o) => o.id === orderId);
 
-      await api.put(`/admin/orders/${order.id}`, {
-        paymentStatus: order.paymentStatus,
-        orderStatus: order.orderStatus,
-        paymentMethod: order.paymentMethod,
+    setOrders((prev) =>
+      prev.map((order) =>
+        order.id === orderId ? { ...order, [field]: newValue } : order
+      )
+    );
+
+    try {
+      setUpdatingField(`${orderId}-${field}`);
+
+      if (field === "paymentStatus") {
+        await api.put(`/admin/orders/${orderId}/payment-status`, {
+          status: newValue,
+          paymentMethod: targetOrder?.paymentMethod || "cod",
+        });
+      } else {
+        await api.put(`/admin/orders/${orderId}/status`, {
+          status: newValue,
+        });
+      }
+    } catch (error: any) {
+      console.error(`Lỗi cập nhật ${field}:`, error);
+      alert(
+        error?.response?.data?.message ||
+        "Không cập nhật được trạng thái. Đang hoàn tác lại..."
+      );
+      setOrders(prevOrders);
+    } finally {
+      setUpdatingField(null);
+    }
+  };
+
+  const handleStartEdit = () => {
+    setOriginalOrders(JSON.parse(JSON.stringify(orders)));
+    setIsEditingTable(true);
+  };
+
+  const handleCancelEdit = () => {
+    setOrders(originalOrders);
+    setIsEditingTable(false);
+  };
+
+  const handleSaveAllOrders = async () => {
+    try {
+      setIsUpdating(true);
+
+      const modifiedOrders = orders.filter((o) => {
+        const orig = originalOrders.find((origO) => origO.id === o.id);
+        if (!orig) return false;
+        return (
+          o.paymentStatus !== orig.paymentStatus ||
+          o.orderStatus !== orig.orderStatus
+        );
       });
 
-      alert("Cập nhật đơn hàng thành công.");
+      if (modifiedOrders.length === 0) {
+        alert("Không có thay đổi nào để cập nhật.");
+        setIsEditingTable(false);
+        return;
+      }
+
+      // Gửi yêu cầu cập nhật lên cơ sở dữ liệu
+      await Promise.all(
+        modifiedOrders.map((order) =>
+          api.put(`/admin/orders/${order.id}`, {
+            paymentStatus: order.paymentStatus,
+            orderStatus: order.orderStatus,
+            paymentMethod: order.paymentMethod || "cod",
+          })
+        )
+      );
+
+      alert(`Cập nhật thành công ${modifiedOrders.length} đơn hàng vào cơ sở dữ liệu!`);
+      setIsEditingTable(false);
       await loadOrders();
     } catch (error: any) {
       console.error("Lỗi cập nhật đơn hàng:", error);
       alert(error?.response?.data?.message || "Không cập nhật được đơn hàng.");
     } finally {
-      setSavingId(null);
+      setIsUpdating(false);
     }
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900">Quản lý đơn hàng</h1>
+    <div className="container mx-auto px-4 py-8 space-y-8">
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-2.5 h-6 rounded-full bg-orange-500" />
+          <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+            Quản lý đơn hàng
+          </h1>
+        </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border p-5">
-        <div className="flex flex-col gap-4 mb-4">
-          <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="text-xl font-semibold">Danh sách đơn hàng</h2>
-              <span className="px-3 py-1 rounded-full bg-orange-100 text-orange-700 text-sm font-semibold">
-                Tổng số: {orders.length}
-              </span>
-              <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-sm font-semibold">
-                Đang hiển thị: {filteredOrders.length}
-              </span>
-            </div>
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-5 md:p-6">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-6 rounded-full bg-orange-500" />
+            <h2 className="text-xl font-bold text-slate-900">Danh sách đơn hàng</h2>
+          </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
-              <select
-                value={searchField}
-                onChange={(e) => setSearchField(e.target.value as SearchField)}
-                className="border rounded-xl px-4 py-3 outline-none focus:ring min-w-[190px]"
-              >
-                <option value="all">Tất cả</option>
-                <option value="id">Mã đơn</option>
-                <option value="customerName">Khách hàng</option>
-                <option value="phone">SĐT</option>
-                <option value="paymentMethod">Phương thức</option>
-              </select>
-
-              <input
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-                placeholder="Nhập từ khóa tìm kiếm..."
-                className="w-full xl:w-80 border rounded-xl px-4 py-3 outline-none focus:ring"
-              />
-
+          <div className="flex items-center gap-2.5">
+            {hasActiveFilters && (
               <button
                 type="button"
                 onClick={clearAllFilters}
-                className="px-4 py-3 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 whitespace-nowrap"
+                className="text-xs font-semibold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200/60 px-3.5 py-2 rounded-xl transition-colors cursor-pointer"
               >
-                Xóa lọc
+                Xóa tất cả lọc
               </button>
+            )}
 
+            {!isEditingTable ? (
               <button
                 type="button"
-                onClick={loadOrders}
+                onClick={handleStartEdit}
                 disabled={isLoading}
-                className="px-4 py-3 rounded-xl bg-orange-50 text-orange-600 hover:bg-orange-100 font-bold flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-50 transition-colors"
-                title="Làm mới danh sách đơn hàng"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
+                title="Bấm để chỉnh sửa trạng thái đơn hàng"
               >
-                <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-                Làm mới
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Chỉnh sửa</span>
               </button>
-            </div>
-          </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  disabled={isUpdating}
+                  className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold transition-all cursor-pointer disabled:opacity-50"
+                >
+                  Hủy
+                </button>
 
-          <div className="flex flex-col lg:flex-row gap-3">
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => {
-                  setPaymentFilterOpen((prev) => !prev);
-                  setOrderFilterOpen(false);
-                }}
-                className="px-4 py-3 rounded-xl border bg-white hover:bg-slate-50 min-w-[220px] text-left flex items-center justify-between"
-              >
-                <span className="flex items-center gap-2">
-                  <Filter className="w-4 h-4" />
-                  TT thanh toán
-                  {paymentStatusFilters.length > 0 && (
-                    <span className="px-2 py-0.5 rounded-full text-xs bg-orange-100 text-orange-700">
-                      {paymentStatusFilters.length}
-                    </span>
+                <button
+                  type="button"
+                  onClick={handleSaveAllOrders}
+                  disabled={isUpdating}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                  title="Cập nhật các thay đổi vào cơ sở dữ liệu"
+                >
+                  {isUpdating ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Đang lưu...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Cập nhật</span>
+                    </>
                   )}
-                </span>
-              </button>
+                </button>
+              </>
+            )}
 
-              {paymentFilterOpen && (
-                <div className="absolute z-20 mt-2 w-[320px] bg-white border rounded-xl shadow-lg overflow-hidden">
-                  <div className="p-3 border-b">
-                    <div className="relative">
-                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                      <input
-                        value={paymentFilterKeyword}
-                        onChange={(e) => setPaymentFilterKeyword(e.target.value)}
-                        placeholder="Tìm kiếm bộ lọc"
-                        className="w-full border rounded-lg pl-9 pr-3 py-2 outline-none focus:ring"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="max-h-[220px] overflow-y-auto py-2">
-                    {filteredPaymentOptions.map((item) => (
-                      <label
-                        key={item.value}
-                        className="flex items-center gap-3 px-4 py-2 hover:bg-slate-50 cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={paymentStatusFilters.includes(item.value)}
-                          onChange={() => togglePaymentStatusFilter(item.value)}
-                          className="w-4 h-4"
-                        />
-                        <span>{item.label}</span>
-                      </label>
-                    ))}
-                  </div>
-
-                  <div className="border-t px-3 py-3 flex items-center justify-between">
-                    <button
-                      type="button"
-                      onClick={() => setPaymentStatusFilters([])}
-                      className="text-slate-400 hover:text-slate-600 text-sm"
-                    >
-                      Xóa chọn
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPaymentFilterOpen(false)}
-                      className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 text-sm font-medium"
-                    >
-                      Đồng ý
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => {
-                  setOrderFilterOpen((prev) => !prev);
-                  setPaymentFilterOpen(false);
-                }}
-                className="px-4 py-3 rounded-xl border bg-white hover:bg-slate-50 min-w-[220px] text-left flex items-center justify-between"
-              >
-                <span className="flex items-center gap-2">
-                  <Filter className="w-4 h-4" />
-                  TT đơn hàng
-                  {orderStatusFilters.length > 0 && (
-                    <span className="px-2 py-0.5 rounded-full text-xs bg-slate-100 text-slate-700">
-                      {orderStatusFilters.length}
-                    </span>
-                  )}
-                </span>
-              </button>
-
-              {orderFilterOpen && (
-                <div className="absolute z-20 mt-2 w-[320px] bg-white border rounded-xl shadow-lg overflow-hidden">
-                  <div className="p-3 border-b">
-                    <div className="relative">
-                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                      <input
-                        value={orderFilterKeyword}
-                        onChange={(e) => setOrderFilterKeyword(e.target.value)}
-                        placeholder="Tìm kiếm bộ lọc"
-                        className="w-full border rounded-lg pl-9 pr-3 py-2 outline-none focus:ring"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="max-h-[220px] overflow-y-auto py-2">
-                    {filteredOrderOptions.map((item) => (
-                      <label
-                        key={item.value}
-                        className="flex items-center gap-3 px-4 py-2 hover:bg-slate-50 cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={orderStatusFilters.includes(item.value)}
-                          onChange={() => toggleOrderStatusFilter(item.value)}
-                          className="w-4 h-4"
-                        />
-                        <span>{item.label}</span>
-                      </label>
-                    ))}
-                  </div>
-
-                  <div className="border-t px-3 py-3 flex items-center justify-between">
-                    <button
-                      type="button"
-                      onClick={() => setOrderStatusFilters([])}
-                      className="text-slate-400 hover:text-slate-600 text-sm"
-                    >
-                      Xóa chọn
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setOrderFilterOpen(false)}
-                      className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 text-sm font-medium"
-                    >
-                      Đồng ý
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+            <button
+              type="button"
+              onClick={loadOrders}
+              disabled={isLoading || isUpdating}
+              className="flex items-center justify-center p-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl shadow-sm transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+              title="Làm mới danh sách"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+            </button>
           </div>
         </div>
 
         {isLoading ? (
-          <div className="py-10 text-center text-slate-500">
-            Đang tải đơn hàng...
-          </div>
-        ) : filteredOrders.length === 0 ? (
-          <div className="py-10 text-center text-slate-500">
-            Không có đơn hàng nào phù hợp.
+          <div className="py-16 text-center text-slate-500">
+            <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-orange-500" />
+            Đang tải danh sách đơn hàng...
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto min-h-[360px]">
             <table className="w-full min-w-[1240px] border-collapse">
               <thead>
                 <tr className="bg-slate-100 text-left">
-                  <th className="p-3 border-b min-w-[90px]">Mã đơn</th>
-                  <th className="p-3 border-b min-w-[280px]">Khách hàng</th>
-                  <th className="p-3 border-b min-w-[140px]">Tổng tiền</th>
-                  <th className="p-3 border-b min-w-[150px]">Phương thức</th>
-                  <th className="p-3 border-b min-w-[190px]">TT thanh toán</th>
-                  <th className="p-3 border-b min-w-[190px]">TT đơn hàng</th>
-                  <th className="p-3 border-b min-w-[130px]">Ngày tạo</th>
-                  <th className="p-3 border-b min-w-[140px] sticky right-0 bg-slate-100 z-20 shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.08)]">
-                    Thao tác
+                  <th className="p-3 border-b min-w-[130px] relative">
+                    <div ref={idSearchRef} className="relative inline-block text-left">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!idSearchOpen) setTempIdSearch(idSearch);
+                          setIdSearchOpen((prev) => !prev);
+                          closeOtherPopovers("id");
+                        }}
+                        className={`flex items-center gap-1.5 font-semibold text-sm transition-colors py-1 px-2.5 -ml-2 rounded-lg hover:bg-slate-200/80 cursor-pointer ${idSearch ? "text-orange-600 bg-orange-50/80" : "text-slate-800"
+                          }`}
+                        title="Bấm để tìm kiếm theo mã đơn"
+                      >
+                        <Search
+                          className={`w-3.5 h-3.5 ${idSearch ? "text-orange-600" : "text-slate-400 group-hover:text-slate-600"
+                            }`}
+                        />
+                        <span>Mã đơn</span>
+                        {idSearch && (
+                          <span className="w-2 h-2 rounded-full bg-orange-600" />
+                        )}
+                      </button>
+
+                      {idSearchOpen && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute left-0 top-full mt-2 z-40 w-[240px] bg-white border border-slate-200 rounded-xl shadow-xl p-3 font-normal text-slate-800"
+                        >
+                          <div className="text-xs font-bold text-slate-700 mb-2">Tìm kiếm Mã đơn</div>
+                          <input
+                            autoFocus
+                            type="text"
+                            value={tempIdSearch}
+                            onChange={(e) => setTempIdSearch(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handleApplyIdSearch();
+                              }
+                            }}
+                            placeholder="Nhập mã đơn (vd: 13)..."
+                            className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white mb-2"
+                          />
+                          <div className="flex items-center justify-between text-xs pt-1 border-t">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTempIdSearch("");
+                                setIdSearch("");
+                                setIdSearchOpen(false);
+                              }}
+                              className="text-slate-500 hover:text-slate-800 font-medium cursor-pointer"
+                            >
+                              Xóa
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleApplyIdSearch}
+                              className="px-3 py-1 rounded bg-orange-500 text-white hover:bg-orange-600 font-medium cursor-pointer"
+                            >
+                              Đồng ý
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </th>
+
+                  <th className="p-3 border-b min-w-[280px] relative">
+                    <div ref={customerSearchRef} className="relative inline-block text-left">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!customerSearchOpen) setTempCustomerSearch(customerSearch);
+                          setCustomerSearchOpen((prev) => !prev);
+                          closeOtherPopovers("customer");
+                        }}
+                        className={`flex items-center gap-1.5 font-semibold text-sm transition-colors py-1 px-2.5 -ml-2 rounded-lg hover:bg-slate-200/80 cursor-pointer ${customerSearch ? "text-orange-600 bg-orange-50/80" : "text-slate-800"
+                          }`}
+                        title="Bấm để tìm kiếm khách hàng"
+                      >
+                        <Search
+                          className={`w-3.5 h-3.5 ${customerSearch ? "text-orange-600" : "text-slate-400 group-hover:text-slate-600"
+                            }`}
+                        />
+                        <span>Khách hàng</span>
+                        {customerSearch && (
+                          <span className="w-2 h-2 rounded-full bg-orange-600" />
+                        )}
+                      </button>
+
+                      {customerSearchOpen && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute left-0 top-full mt-2 z-40 w-[260px] bg-white border border-slate-200 rounded-xl shadow-xl p-3 font-normal text-slate-800"
+                        >
+                          <div className="text-xs font-bold text-slate-700 mb-2">Tìm kiếm Khách hàng</div>
+                          <input
+                            autoFocus
+                            type="text"
+                            value={tempCustomerSearch}
+                            onChange={(e) => setTempCustomerSearch(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handleApplyCustomerSearch();
+                              }
+                            }}
+                            placeholder="Nhập tên, SĐT hoặc địa chỉ..."
+                            className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white mb-2"
+                          />
+                          <div className="flex items-center justify-between text-xs pt-1 border-t">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTempCustomerSearch("");
+                                setCustomerSearch("");
+                                setCustomerSearchOpen(false);
+                              }}
+                              className="text-slate-500 hover:text-slate-800 font-medium cursor-pointer"
+                            >
+                              Xóa
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleApplyCustomerSearch}
+                              className="px-3 py-1 rounded bg-orange-500 text-white hover:bg-orange-600 font-medium cursor-pointer"
+                            >
+                              Đồng ý
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </th>
+
+                  <th className="p-3 border-b min-w-[140px] font-semibold text-sm text-slate-800">Tổng tiền</th>
+
+                  <th className="p-3 border-b min-w-[170px] relative">
+                    <div ref={paymentMethodSearchRef} className="relative inline-block text-left">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!paymentMethodSearchOpen) setTempPaymentMethodSearch(paymentMethodSearch);
+                          setPaymentMethodSearchOpen((prev) => !prev);
+                          closeOtherPopovers("paymentMethod");
+                        }}
+                        className={`flex items-center gap-1.5 font-semibold text-sm transition-colors py-1 px-2.5 -ml-2 rounded-lg hover:bg-slate-200/80 cursor-pointer ${paymentMethodSearch ? "text-orange-600 bg-orange-50/80" : "text-slate-800"
+                          }`}
+                        title="Bấm để tìm kiếm phương thức thanh toán"
+                      >
+                        <Search
+                          className={`w-3.5 h-3.5 ${paymentMethodSearch ? "text-orange-600" : "text-slate-400 group-hover:text-slate-600"
+                            }`}
+                        />
+                        <span>Phương thức</span>
+                        {paymentMethodSearch && (
+                          <span className="w-2 h-2 rounded-full bg-orange-600" />
+                        )}
+                      </button>
+
+                      {paymentMethodSearchOpen && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute left-0 top-full mt-2 z-40 w-[240px] bg-white border border-slate-200 rounded-xl shadow-xl p-3 font-normal text-slate-800"
+                        >
+                          <div className="text-xs font-bold text-slate-700 mb-2">Tìm kiếm Phương thức</div>
+                          <input
+                            autoFocus
+                            type="text"
+                            value={tempPaymentMethodSearch}
+                            onChange={(e) => setTempPaymentMethodSearch(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handleApplyPaymentMethodSearch();
+                              }
+                            }}
+                            placeholder="Nhập COD hoặc Chuyển khoản..."
+                            className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white mb-2"
+                          />
+                          <div className="flex items-center justify-between text-xs pt-1 border-t">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTempPaymentMethodSearch("");
+                                setPaymentMethodSearch("");
+                                setPaymentMethodSearchOpen(false);
+                              }}
+                              className="text-slate-500 hover:text-slate-800 font-medium cursor-pointer"
+                            >
+                              Xóa
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleApplyPaymentMethodSearch}
+                              className="px-3 py-1 rounded bg-orange-500 text-white hover:bg-orange-600 font-medium cursor-pointer"
+                            >
+                              Đồng ý
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </th>
+
+                  <th className="p-3 border-b min-w-[210px] relative">
+                    <div ref={paymentFilterRef} className="relative inline-block text-left">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPaymentFilterOpen((prev) => !prev);
+                          setOrderFilterOpen(false);
+                        }}
+                        className={`flex items-center gap-1.5 font-semibold text-sm transition-colors py-1 px-2.5 -ml-2 rounded-lg hover:bg-slate-200/80 cursor-pointer ${paymentStatusFilters.length > 0 ? "text-orange-600 bg-orange-50/80" : "text-slate-800"
+                          }`}
+                        title="Bấm để lọc theo trạng thái thanh toán"
+                      >
+                        <span>TT thanh toán</span>
+                        <Filter
+                          className={`w-3.5 h-3.5 transition-colors ${paymentStatusFilters.length > 0
+                            ? "text-orange-600 fill-orange-500"
+                            : "text-slate-400 group-hover:text-slate-600"
+                            }`}
+                        />
+                        {paymentStatusFilters.length > 0 && (
+                          <span className="w-4 h-4 rounded-full bg-orange-600 text-white text-[10px] flex items-center justify-center font-bold">
+                            {paymentStatusFilters.length}
+                          </span>
+                        )}
+                      </button>
+
+                      {paymentFilterOpen && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute left-0 top-full mt-2 z-40 w-[270px] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden font-normal text-slate-800"
+                        >
+                          <div className="p-2.5 border-b bg-slate-50">
+                            <div className="relative">
+                              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                              <input
+                                value={paymentFilterKeyword}
+                                onChange={(e) => setPaymentFilterKeyword(e.target.value)}
+                                placeholder="Tìm kiếm trạng thái..."
+                                className="w-full border rounded-lg pl-8 pr-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="max-h-[190px] overflow-y-auto py-1.5">
+                            {filteredPaymentOptions.map((item) => (
+                              <label
+                                key={item.value}
+                                className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-slate-50 cursor-pointer text-xs"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={paymentStatusFilters.includes(item.value)}
+                                  onChange={() => togglePaymentStatusFilter(item.value)}
+                                  className="w-3.5 h-3.5 rounded text-orange-600 focus:ring-orange-500 cursor-pointer"
+                                />
+                                <span className="font-medium text-slate-700">{item.label}</span>
+                              </label>
+                            ))}
+                          </div>
+
+                          <div className="border-t px-3 py-2 flex items-center justify-between bg-slate-50 text-xs">
+                            <button
+                              type="button"
+                              onClick={() => setPaymentStatusFilters([])}
+                              className="text-slate-500 hover:text-slate-800 font-medium"
+                            >
+                              Xóa
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPaymentFilterOpen(false)}
+                              className="px-3 py-1 rounded bg-orange-500 text-white hover:bg-orange-600 font-medium cursor-pointer"
+                            >
+                              Đồng ý
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </th>
+
+                  <th className="p-3 border-b min-w-[210px] relative">
+                    <div ref={orderFilterRef} className="relative inline-block text-left">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOrderFilterOpen((prev) => !prev);
+                          setPaymentFilterOpen(false);
+                        }}
+                        className={`flex items-center gap-1.5 font-semibold text-sm transition-colors py-1 px-2.5 -ml-2 rounded-lg hover:bg-slate-200/80 cursor-pointer ${orderStatusFilters.length > 0 ? "text-orange-600 bg-orange-50/80" : "text-slate-800"
+                          }`}
+                        title="Bấm để lọc theo trạng thái đơn hàng"
+                      >
+                        <span>TT đơn hàng</span>
+                        <Filter
+                          className={`w-3.5 h-3.5 transition-colors ${orderStatusFilters.length > 0
+                            ? "text-orange-600 fill-orange-500"
+                            : "text-slate-400 group-hover:text-slate-600"
+                            }`}
+                        />
+                        {orderStatusFilters.length > 0 && (
+                          <span className="w-4 h-4 rounded-full bg-orange-600 text-white text-[10px] flex items-center justify-center font-bold">
+                            {orderStatusFilters.length}
+                          </span>
+                        )}
+                      </button>
+
+                      {orderFilterOpen && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute left-0 top-full mt-2 z-40 w-[270px] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden font-normal text-slate-800"
+                        >
+                          <div className="p-2.5 border-b bg-slate-50">
+                            <div className="relative">
+                              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                              <input
+                                value={orderFilterKeyword}
+                                onChange={(e) => setOrderFilterKeyword(e.target.value)}
+                                placeholder="Tìm kiếm trạng thái..."
+                                className="w-full border rounded-lg pl-8 pr-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="max-h-[190px] overflow-y-auto py-1.5">
+                            {filteredOrderOptions.map((item) => (
+                              <label
+                                key={item.value}
+                                className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-slate-50 cursor-pointer text-xs"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={orderStatusFilters.includes(item.value)}
+                                  onChange={() => toggleOrderStatusFilter(item.value)}
+                                  className="w-3.5 h-3.5 rounded text-orange-600 focus:ring-orange-500 cursor-pointer"
+                                />
+                                <span className="font-medium text-slate-700">{item.label}</span>
+                              </label>
+                            ))}
+                          </div>
+
+                          <div className="border-t px-3 py-2 flex items-center justify-between bg-slate-50 text-xs">
+                            <button
+                              type="button"
+                              onClick={() => setOrderStatusFilters([])}
+                              className="text-slate-500 hover:text-slate-800 font-medium"
+                            >
+                              Xóa
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setOrderFilterOpen(false)}
+                              className="px-3 py-1 rounded bg-orange-500 text-white hover:bg-orange-600 font-medium cursor-pointer"
+                            >
+                              Đồng ý
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </th>
+                  <th className="p-3 border-b min-w-[130px] font-semibold text-sm text-slate-800">Ngày tạo</th>
                 </tr>
               </thead>
 
               <tbody>
-                {filteredOrders.map((order) => (
-                  <tr key={String(order.id)} className="hover:bg-slate-50 align-top">
-                    <td className="p-3 border-b font-semibold whitespace-nowrap">
-                      #{order.id}
-                    </td>
-
-                    <td className="p-3 border-b">
-                      <div className="font-medium text-slate-900">
-                        {order.customerName}
+                {filteredOrders.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="py-16 text-center text-slate-500 font-medium"
+                    >
+                      <div className="max-w-md mx-auto space-y-2">
+                        <p className="text-slate-600 text-sm font-semibold">
+                          Không tìm thấy đơn hàng nào phù hợp.
+                        </p>
+                        <p className="text-slate-400 text-xs">
+                          Thử kiểm tra lại từ khóa tìm kiếm hoặc bấm &quot;Xóa lọc&quot; để xem toàn bộ danh sách.
+                        </p>
+                        {hasActiveFilters && (
+                          <button
+                            type="button"
+                            onClick={clearAllFilters}
+                            className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-50 text-orange-600 hover:bg-orange-100 text-xs font-semibold border border-orange-200 transition-colors cursor-pointer"
+                          >
+                            Xóa bộ lọc
+                          </button>
+                        )}
                       </div>
-                      <div className="text-sm text-slate-500 mt-1">
-                        SĐT: {order.phone || "-"}
-                      </div>
-                      <div className="text-sm text-slate-500">
-                        Địa chỉ: {order.address || "-"}
-                      </div>
-                    </td>
-
-                    <td className="p-3 border-b font-medium whitespace-nowrap">
-                      {Number(order.totalAmount || 0).toLocaleString("vi-VN")} đ
-                    </td>
-
-                    <td className="p-3 border-b whitespace-nowrap">
-                      {formatPaymentMethod(order.paymentMethod)}
-                    </td>
-
-                    <td className="p-3 border-b">
-                      <div className="mb-2">
-                        <span
-                          className={`px-3 py-1 rounded-full text-sm font-semibold border ${paymentStatusClass(
-                            order.paymentStatus
-                          )}`}
-                        >
-                          {paymentStatusLabel(order.paymentStatus)}
-                        </span>
-                      </div>
-
-                      <select
-                        value={order.paymentStatus}
-                        onChange={(e) =>
-                          handleFieldChange(order.id, "paymentStatus", e.target.value)
-                        }
-                        className="w-full border rounded-lg px-3 py-2"
-                      >
-                        <option value="pending">pending</option>
-                        <option value="paid">paid</option>
-                        <option value="failed">failed</option>
-                      </select>
-                    </td>
-
-                    <td className="p-3 border-b">
-                      <div className="mb-2">
-                        <span
-                          className={`px-3 py-1 rounded-full text-sm font-semibold border ${orderStatusClass(
-                            order.orderStatus
-                          )}`}
-                        >
-                          {orderStatusLabel(order.orderStatus)}
-                        </span>
-                      </div>
-
-                      <select
-                        value={order.orderStatus}
-                        onChange={(e) =>
-                          handleFieldChange(order.id, "orderStatus", e.target.value)
-                        }
-                        className="w-full border rounded-lg px-3 py-2"
-                      >
-                        <option value="pending">pending</option>
-                        <option value="confirmed">confirmed</option>
-                        <option value="shipping">shipping</option>
-                        <option value="completed">completed</option>
-                        <option value="cancelled">cancelled</option>
-                      </select>
-                    </td>
-
-                    <td className="p-3 border-b whitespace-nowrap text-sm text-slate-600">
-                      {formatDate(order.createdAt)}
-                    </td>
-
-                    <td className="p-3 border-b whitespace-nowrap sticky right-0 bg-white z-10 shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.08)]">
-                      <button
-                        onClick={() => handleUpdateOrder(order)}
-                        disabled={savingId === order.id}
-                        className="px-4 py-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60"
-                      >
-                        {savingId === order.id ? "Đang lưu..." : "Cập nhật"}
-                      </button>
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredOrders.map((order) => (
+                    <tr key={String(order.id)} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="p-3 border-b whitespace-nowrap font-bold text-slate-400 text-sm">
+                        #{order.id}
+                      </td>
+
+                      <td className="p-3 border-b min-w-[220px]">
+                        <div className="font-semibold text-slate-800 text-sm">
+                          {order.customerName}
+                        </div>
+                        <div className="text-xs text-slate-500 mt-1">
+                          SĐT: {order.phone || "-"}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          Địa chỉ: {order.address || "-"}
+                        </div>
+                      </td>
+
+                      <td className="p-3 border-b font-bold text-orange-600 text-sm whitespace-nowrap">
+                        {Number(order.totalAmount || 0).toLocaleString("vi-VN")} đ
+                      </td>
+
+                      <td className="p-3 border-b text-slate-600 text-sm whitespace-nowrap">
+                        {formatPaymentMethod(order.paymentMethod)}
+                      </td>
+
+                      {/* Cột TT thanh toán */}
+                      <td className="p-3 border-b">
+                        {isEditingTable ? (
+                          <div className="relative inline-flex items-center">
+                            <select
+                              value={order.paymentStatus}
+                              onChange={(e) =>
+                                handleLocalStatusChange(order.id, "paymentStatus", e.target.value)
+                              }
+                              className={`appearance-none cursor-pointer pl-3.5 pr-8 py-1.5 rounded-full text-xs font-semibold border transition-all hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 ${paymentStatusClass(
+                                order.paymentStatus
+                              )}`}
+                              title="Bấm để chọn trạng thái thanh toán"
+                            >
+                              {PAYMENT_STATUS_OPTIONS.map((item) => (
+                                <option
+                                  key={item.value}
+                                  value={item.value}
+                                  className="bg-white text-slate-800 font-medium py-1"
+                                >
+                                  {item.label}
+                                </option>
+                              ))}
+                            </select>
+                            <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 pointer-events-none opacity-60" />
+                          </div>
+                        ) : (
+                          <span
+                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${paymentStatusClass(
+                              order.paymentStatus
+                            )}`}
+                          >
+                            {paymentStatusLabel(order.paymentStatus)}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Cột TT đơn hàng */}
+                      <td className="p-3 border-b">
+                        {isEditingTable ? (
+                          <div className="relative inline-flex items-center">
+                            <select
+                              value={order.orderStatus}
+                              onChange={(e) =>
+                                handleLocalStatusChange(order.id, "orderStatus", e.target.value)
+                              }
+                              className={`appearance-none cursor-pointer pl-3.5 pr-8 py-1.5 rounded-full text-xs font-semibold border transition-all hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 ${orderStatusClass(
+                                order.orderStatus
+                              )}`}
+                              title="Bấm để chọn trạng thái đơn hàng"
+                            >
+                              {ORDER_STATUS_OPTIONS.map((item) => (
+                                <option
+                                  key={item.value}
+                                  value={item.value}
+                                  className="bg-white text-slate-800 font-medium py-1"
+                                >
+                                  {item.label}
+                                </option>
+                              ))}
+                            </select>
+                            <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 pointer-events-none opacity-60" />
+                          </div>
+                        ) : (
+                          <span
+                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${orderStatusClass(
+                              order.orderStatus
+                            )}`}
+                          >
+                            {orderStatusLabel(order.orderStatus)}
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="p-3 border-b text-slate-600 text-sm whitespace-nowrap">
+                        {formatDate(order.createdAt)}
+                      </td>
+                    </tr>
+                  )))}
               </tbody>
             </table>
           </div>

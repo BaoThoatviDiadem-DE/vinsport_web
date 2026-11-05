@@ -3,6 +3,7 @@ const router = express.Router();
 const { poolPromise, sql } = require("../db");
 const { uploadOrderToS3, uploadUserToS3 } = require("../utils/s3Service");
 const { sendOrderEmail } = require("../utils/emailService");
+const { sendOrderToQueue } = require("../utils/sqsService");
 const { verifyToken } = require("../middlewares/authMiddleware");
 
 function mapPaymentMethod(method) {
@@ -50,7 +51,18 @@ router.post("/orders", async (req, res) => {
       }
     }
 
-    let userId = authUserId;
+    let userId = null;
+
+    // Kiểm tra xem authUserId từ token có thực sự tồn tại trong CSDL không
+    if (authUserId) {
+      const authUserCheck = await new sql.Request(transaction)
+        .input("authUserId", sql.Int, authUserId)
+        .query(`SELECT TOP 1 user_id FROM Users WHERE user_id = @authUserId`);
+
+      if (authUserCheck.recordset.length > 0) {
+        userId = authUserId;
+      }
+    }
 
     if (userId) {
       await new sql.Request(transaction)
@@ -314,11 +326,12 @@ router.post("/orders", async (req, res) => {
 
     await transaction.commit();
 
-    // Sau khi insert vào CSDL thành công, gọi hàm backup sang Amazon S3
-    // Hàm này chạy ngầm (không await) để không làm chậm response trả về cho user
-    uploadOrderToS3(orderId);
-    uploadUserToS3(userId); // Backup luôn thông tin khách hàng nếu họ có đổi thông tin
-    sendOrderEmail(orderId, "NEW_ORDER");
+    // Backup thông tin khách hàng lên Amazon S3 (nếu có thay đổi)
+    uploadUserToS3(userId);
+
+    // Đẩy sự kiện đơn hàng mới vào hàng đợi Amazon SQS
+    // Worker sẽ xử lý gửi email xác nhận và backup đơn hàng sang S3 bất đồng bộ
+    sendOrderToQueue(orderId, "NEW_ORDER");
 
     return res.status(201).json({
       message: "Tạo đơn hàng thành công",
@@ -725,9 +738,8 @@ router.put("/orders/:id/cancel", verifyToken, async (req, res) => {
 
     await transaction.commit();
 
-    // Đồng bộ sang Amazon S3 Data Lakehouse
-    uploadOrderToS3(orderId);
-    sendOrderEmail(orderId, "CANCELLED");
+    // Đẩy sự kiện hủy đơn vào hàng đợi Amazon SQS
+    sendOrderToQueue(orderId, "CANCELLED");
 
     return res.json({
       success: true,
