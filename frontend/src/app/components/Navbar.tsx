@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router";
 import {
   Home,
@@ -15,17 +15,37 @@ import {
   Search,
   Menu,
   X,
+  ChevronDown,
+  UserCog,
 } from "lucide-react";
 import { useCart } from "../contexts/CartContext";
 import { useAuth } from "../contexts/AuthContext";
+import { ProfileModal } from "./ProfileModal";
 
 export const Navbar = () => {
   const { totalItems } = useCart();
   const { isAuthenticated, user, logout } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Đóng dropdown tài khoản khi click ra ngoài
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        userMenuRef.current &&
+        !userMenuRef.current.contains(e.target as Node)
+      ) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Đóng sidebar khi chuyển trang
   useEffect(() => {
@@ -327,8 +347,14 @@ export const Navbar = () => {
           <div className="h-5 w-px bg-slate-200 hidden sm:block" />
 
           {isAuthenticated ? (
-            <div className="flex items-center gap-3">
-              <div className="hidden lg:flex items-center gap-2 text-sm">
+            <div className="relative" ref={userMenuRef}>
+              <button
+                type="button"
+                onClick={() => setIsUserMenuOpen((prev) => !prev)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm hover:bg-slate-100 transition-colors cursor-pointer select-none border border-transparent hover:border-slate-200"
+                aria-expanded={isUserMenuOpen}
+                aria-haspopup="true"
+              >
                 <span className="text-slate-500">Chào,</span>
                 <span className="font-semibold text-slate-800">{user?.name}</span>
                 {user?.role === "admin" && (
@@ -336,16 +362,49 @@ export const Navbar = () => {
                     Admin
                   </span>
                 )}
-              </div>
-
-              <button
-                onClick={handleLogout}
-                title="Đăng xuất"
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-red-600 hover:bg-red-50 border border-slate-200 hover:border-red-200 transition-all"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>Đăng xuất</span>
+                <ChevronDown
+                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                    isUserMenuOpen ? "rotate-180" : ""
+                  }`}
+                />
               </button>
+
+              {/* Menu Dropdown xuất hiện khi bấm vào phần tên */}
+              {isUserMenuOpen && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="px-4 py-2 border-b border-slate-100">
+                    <p className="text-[11px] text-slate-400 font-medium">Tài khoản</p>
+                    <p className="text-sm font-semibold text-slate-800 truncate">{user?.name}</p>
+                    <p className="text-xs text-slate-500 truncate">{user?.email}</p>
+                  </div>
+
+                  <div className="p-1 space-y-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        setIsProfileModalOpen(true);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-colors cursor-pointer text-left"
+                    >
+                      <UserCog className="w-4 h-4 text-slate-400" />
+                      <span className="font-medium">Cập nhật thông tin</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        handleLogout();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer text-left"
+                    >
+                      <LogOut className="w-4 h-4 text-slate-400" />
+                      <span className="font-medium">Đăng xuất</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <Link
@@ -358,6 +417,12 @@ export const Navbar = () => {
           )}
         </div>
       </header>
+
+      {/* Modal cập nhật thông tin cá nhân */}
+      <ProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+      />
     </>
   );
 };

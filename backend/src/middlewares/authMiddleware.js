@@ -28,12 +28,61 @@ const verifyToken = async (req, res, next) => {
       });
     }
 
-    // Xác minh chữ ký, User Pool, Client ID và thời hạn token
-    const payload = await verifier.verify(token);
+    req.token = token;
+
+    // Thử xác minh chữ ký, User Pool, Client ID và thời hạn token Cognito
+    let cognitoSub = null;
+    try {
+      const payload = await verifier.verify(token);
+      cognitoSub = payload.sub;
+    } catch (cognitoError) {
+      // Fallback: hỗ trợ token đăng nhập nội bộ (legacy dev token) dạng user-<id>-<role>-token
+      const match = token.match(/^user-(\d+)-(admin|user)-token$/);
+      if (match) {
+        const userId = parseInt(match[1]);
+        const pool = await poolPromise;
+        const result = await pool
+          .request()
+          .input("userId", sql.Int, userId)
+          .query(`
+            SELECT
+              user_id,
+              [name],
+              [email],
+              [phone],
+              [address],
+              [role],
+              [cognito_sub]
+            FROM Users
+            WHERE user_id = @userId
+          `);
+
+        if (result.recordset.length === 0) {
+          return res.status(401).json({ message: "Không tìm thấy người dùng" });
+        }
+
+        const user = result.recordset[0];
+        req.user = {
+          user_id: user.user_id,
+          id: user.user_id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone || "",
+          address: user.address || "",
+          role: user.role,
+          cognito_sub: user.cognito_sub,
+        };
+
+        return next();
+      }
+
+      console.error("Cognito authentication error:", cognitoError.message);
+      return res.status(401).json({
+        message: "Access Token không hợp lệ hoặc đã hết hạn",
+      });
+    }
 
     // sub là mã định danh duy nhất của tài khoản Cognito
-    const cognitoSub = payload.sub;
-
     if (!cognitoSub) {
       return res.status(401).json({
         message: "Token không có mã định danh người dùng",

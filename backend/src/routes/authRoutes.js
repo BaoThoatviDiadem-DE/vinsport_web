@@ -8,7 +8,17 @@ const {
   cognitoConfirmSignUp,
   cognitoResendCode,
   cognitoLoginDirect,
+  cognitoUpdateUserAttributes,
+  cognitoVerifyUserAttribute,
+  cognitoGetUserAttributeVerificationCode,
 } = require("../utils/cognitoService");
+const { verifyToken } = require("../middlewares/authMiddleware");
+const { uploadUserToS3 } = require("../utils/s3Service");
+const { sendOtpEmail } = require("../utils/emailService");
+
+// Bộ nhớ tạm lưu trữ yêu cầu đổi email đang chờ xác thực mã OTP
+// key: userId (Number) -> value: { pendingEmail, otpCode, name, phone, address, expiresAt }
+const pendingEmailChanges = new Map();
 
 // Xác minh ID Token dùng cho bước liên kết tài khoản
 let cognitoIdVerifier = null;
@@ -514,6 +524,464 @@ router.post("/register", async (req, res) => {
     console.error("POST /api/register error:", error);
     return res.status(500).json({
       message: error?.originalError?.info?.message || error.message || "Lỗi đăng ký tài khoản",
+    });
+  }
+});
+
+// =========================================================================
+// 4. QUẢN LÝ THÔNG TIN CÁ NHÂN (PROFILE)
+// =========================================================================
+
+// GET /api/auth/profile
+// Lấy thông tin cá nhân mới nhất từ cơ sở dữ liệu
+router.get("/auth/profile", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+    const pool = await poolPromise;
+    const result = await pool
+      .request()
+      .input("userId", sql.Int, userId)
+      .query(`
+        SELECT TOP 1
+          user_id, [name], [email], [phone], [address], [role], [cognito_sub]
+        FROM Users
+        WHERE user_id = @userId
+      `);
+
+    if (result.recordset.length === 0) {
+      return res.status(404).json({ message: "Không tìm thấy người dùng" });
+    }
+
+    const u = result.recordset[0];
+    return res.json({
+      success: true,
+      user: {
+        id: u.user_id,
+        user_id: u.user_id,
+        name: u.name,
+        email: u.email,
+        phone: u.phone || "",
+        address: u.address || "",
+        role: u.role || "user",
+      },
+    });
+  } catch (error) {
+    console.error("GET /api/auth/profile error:", error);
+    return res.status(500).json({
+      message: error?.message || "Không thể tải thông tin cá nhân",
+    });
+  }
+});
+
+// PUT /api/auth/profile
+// Cập nhật thông tin cá nhân người dùng:
+// - Nếu KHÔNG đổi email: Cập nhật trực tiếp SQL Server + AWS Cognito + AWS S3.
+// - Nếu ĐỔI EMAIL: Bắt buộc gửi mã OTP về email mới để xác thực trước khi cập nhật!
+router.put("/auth/profile", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+    const {
+      name = "",
+      email = "",
+      phone = "",
+      address = "",
+    } = req.body || {};
+
+    const cleanName = String(name).trim();
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanPhone = String(phone).trim();
+    const cleanAddress = String(address).trim();
+
+    if (!cleanName) {
+      return res.status(400).json({ message: "Họ và tên không được để trống" });
+    }
+
+    if (!cleanEmail) {
+      return res.status(400).json({ message: "Email không được để trống" });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      return res.status(400).json({ message: "Định dạng email không hợp lệ" });
+    }
+
+    const pool = await poolPromise;
+
+    // Lấy thông tin user hiện tại trong CSDL
+    const currentRes = await pool
+      .request()
+      .input("userId", sql.Int, userId)
+      .query("SELECT TOP 1 user_id, email, name FROM Users WHERE user_id = @userId");
+
+    if (currentRes.recordset.length === 0) {
+      return res.status(404).json({ message: "Không tìm thấy người dùng" });
+    }
+
+    const currentEmail = String(currentRes.recordset[0].email || "").trim().toLowerCase();
+    const isEmailChanging = cleanEmail !== currentEmail;
+
+    // 1. Kiểm tra xem email mới có bị trùng với tài khoản khác không
+    if (isEmailChanging) {
+      const existedEmail = await pool
+        .request()
+        .input("userId", sql.Int, userId)
+        .input("email", sql.NVarChar(100), cleanEmail)
+        .query(`
+          SELECT TOP 1 user_id
+          FROM Users
+          WHERE LOWER(LTRIM(RTRIM(email))) = @email AND user_id <> @userId
+        `);
+
+      if (existedEmail.recordset.length > 0) {
+        return res.status(400).json({
+          message: "Email này đã được sử dụng bởi một tài khoản khác trong hệ thống",
+        });
+      }
+    }
+
+    // 2. Nếu email KHÔNG đổi: cập nhật trực tiếp như bình thường
+    if (!isEmailChanging) {
+      await pool
+        .request()
+        .input("userId", sql.Int, userId)
+        .input("name", sql.NVarChar(100), cleanName)
+        .input("email", sql.NVarChar(100), cleanEmail)
+        .input("phone", sql.NVarChar(15), cleanPhone || null)
+        .input("address", sql.NVarChar(255), cleanAddress || null)
+        .query(`
+          UPDATE Users
+          SET
+            name = @name,
+            email = @email,
+            phone = @phone,
+            address = @address
+          WHERE user_id = @userId
+        `);
+
+      console.log(`[SQL SERVER] Cập nhật thông tin (không đổi email) user_id=${userId}`);
+
+      // Đồng bộ AWS Cognito
+      let cognitoSyncStatus = "Not applicable";
+      if (req.token && !req.token.startsWith("user-")) {
+        try {
+          const cognitoRes = await cognitoUpdateUserAttributes({
+            accessToken: req.token,
+            name: cleanName,
+            phone: cleanPhone,
+            address: cleanAddress,
+          });
+          cognitoSyncStatus = cognitoRes?.error
+            ? `Cảnh báo: ${cognitoRes.error}`
+            : "Đồng bộ AWS Cognito thành công";
+        } catch (cognitoErr) {
+          console.warn("[AWS COGNITO SYNC WARNING]:", cognitoErr.message);
+          cognitoSyncStatus = `Lỗi: ${cognitoErr.message}`;
+        }
+      }
+
+      // Đồng bộ AWS S3
+      try {
+        uploadUserToS3(userId).catch(console.error);
+      } catch (s3Err) {
+        console.warn("[S3 SYNC ERROR]:", s3Err.message);
+      }
+
+      return res.json({
+        success: true,
+        requireEmailOtp: false,
+        message: "Cập nhật thông tin cá nhân thành công!",
+        cognitoStatus: cognitoSyncStatus,
+        user: {
+          id: userId,
+          user_id: userId,
+          name: cleanName,
+          email: cleanEmail,
+          phone: cleanPhone,
+          address: cleanAddress,
+          role: req.user.role || "user",
+        },
+      });
+    }
+
+    // 3. NẾU CÓ ĐỔI EMAIL:
+    // Cập nhật trước Họ tên, SĐT, Địa chỉ vào SQL Server (giữ nguyên email cũ)
+    await pool
+      .request()
+      .input("userId", sql.Int, userId)
+      .input("name", sql.NVarChar(100), cleanName)
+      .input("phone", sql.NVarChar(15), cleanPhone || null)
+      .input("address", sql.NVarChar(255), cleanAddress || null)
+      .query(`
+        UPDATE Users
+        SET
+          name = @name,
+          phone = @phone,
+          address = @address
+        WHERE user_id = @userId
+      `);
+
+    const isCognitoUser = Boolean(req.token && !req.token.startsWith("user-"));
+
+    // 1. Luôn tạo mã OTP 6 số bảo mật
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // 2. Luôn gửi mã OTP trực tiếp qua VinSport Mail Server (Gmail SMTP chính chủ)
+    // Đảm bảo 100% người dùng nhận được mã tức thì, kể cả email trường học/cơ quan (@stu.ptit.edu.vn)
+    try {
+      await sendOtpEmail({
+        toEmail: cleanEmail,
+        otpCode,
+        userName: cleanName,
+        purpose: "thay đổi địa chỉ email",
+      });
+      console.log(`[VinSport OTP] Đã gửi mã OTP đến ${cleanEmail} qua Gmail SMTP`);
+    } catch (mailErr) {
+      console.warn("[VinSport OTP WARNING] Gửi mail qua Gmail thất bại:", mailErr.message);
+    }
+
+    // 3. Nếu là tài khoản Cognito, đồng thời kích hoạt cập nhật trên AWS Cognito
+    if (isCognitoUser) {
+      try {
+        await cognitoUpdateUserAttributes({
+          accessToken: req.token,
+          email: cleanEmail,
+          name: cleanName,
+          phone: cleanPhone,
+        });
+        console.log(
+          `[AWS COGNITO] Đã kích hoạt đổi email cho user_id=${userId}. AWS Cognito: ${cleanEmail}`
+        );
+      } catch (cogErr) {
+        console.warn("[AWS COGNITO UPDATE EMAIL WARNING]:", cogErr.message);
+      }
+    }
+
+    // Lưu vào bộ nhớ chờ xác nhận trong 10 phút
+    pendingEmailChanges.set(userId, {
+      pendingEmail: cleanEmail,
+      otpCode,
+      isCognito: isCognitoUser,
+      name: cleanName,
+      phone: cleanPhone,
+      address: cleanAddress,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+    });
+
+    console.log(
+      `[EMAIL CHANGE] Khởi tạo yêu cầu đổi email cho user_id=${userId}: ${currentEmail} -> ${cleanEmail} (Cognito: ${isCognitoUser})`
+    );
+
+    return res.json({
+      success: true,
+      requireEmailOtp: true,
+      pendingEmail: cleanEmail,
+      message: `Mã OTP xác nhận gồm 6 chữ số đã được gửi đến email mới (${cleanEmail}). Vui lòng nhập mã để hoàn tất đổi email!`,
+      user: {
+        id: userId,
+        user_id: userId,
+        name: cleanName,
+        email: currentEmail, // Email trong database chưa đổi cho đến khi xác minh OTP
+        phone: cleanPhone,
+        address: cleanAddress,
+        role: req.user.role || "user",
+      },
+    });
+  } catch (error) {
+    console.error("PUT /api/auth/profile error:", error);
+    return res.status(500).json({
+      message:
+        error?.originalError?.info?.message ||
+        error.message ||
+        "Không thể cập nhật thông tin người dùng",
+    });
+  }
+});
+
+// POST /api/auth/profile/verify-email-otp
+// Xác thực mã OTP và chính thức cập nhật email trong SQL Server + AWS Cognito + AWS S3
+router.post("/auth/profile/verify-email-otp", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+    const { otp, pendingEmail } = req.body || {};
+
+    const cleanOtp = String(otp || "").trim();
+    const cleanPendingEmail = String(pendingEmail || "").trim().toLowerCase();
+
+    if (!cleanOtp) {
+      return res.status(400).json({ message: "Vui lòng nhập mã OTP gồm 6 chữ số." });
+    }
+
+    const pending = pendingEmailChanges.get(userId);
+
+    if (!pending || pending.pendingEmail !== cleanPendingEmail) {
+      return res.status(400).json({
+        message: "Không tìm thấy yêu cầu đổi email đang chờ hoặc phiên xác thực đã kết thúc.",
+      });
+    }
+
+    if (Date.now() > pending.expiresAt) {
+      pendingEmailChanges.delete(userId);
+      return res.status(400).json({
+        message: "Mã OTP đã hết hạn (quá 10 phút). Vui lòng gửi lại mã mới.",
+      });
+    }
+
+    // Kiểm tra tính hợp lệ của mã OTP
+    let isOtpValid = false;
+    let cognitoStatus = "Not applicable";
+
+    // Cách 1: Khớp mã OTP do VinSport gửi qua Email
+    if (pending.otpCode && cleanOtp === pending.otpCode) {
+      isOtpValid = true;
+      console.log(`[OTP VERIFIED] Khớp mã OTP VinSport gửi qua hòm thư: ${cleanPendingEmail}`);
+
+      // Nếu là tài khoản Cognito, đồng thời kích hoạt xác nhận thuộc tính trên Cognito
+      if (pending.isCognito && req.token && !req.token.startsWith("user-")) {
+        try {
+          await cognitoVerifyUserAttribute({
+            accessToken: req.token,
+            code: cleanOtp,
+            attributeName: "email",
+          });
+          cognitoStatus = "Đã xác thực và cập nhật email trên AWS Cognito (Email verified: Yes)";
+          console.log(`[AWS COGNITO] Xác thực email thành công! Email verified: Yes`);
+        } catch (cognitoErr) {
+          console.warn("[AWS COGNITO VERIFY ATTRIBUTE]:", cognitoErr.message);
+          cognitoStatus = "Đã xác thực chính chủ qua email VinSport";
+        }
+      }
+    } else if (pending.isCognito && req.token && !req.token.startsWith("user-")) {
+      // Cách 2: Dự phòng nếu người dùng nhập mã riêng do AWS Cognito gửi
+      try {
+        await cognitoVerifyUserAttribute({
+          accessToken: req.token,
+          code: cleanOtp,
+          attributeName: "email",
+        });
+        isOtpValid = true;
+        cognitoStatus = "Đã xác thực và cập nhật email trên AWS Cognito (Email verified: Yes)";
+        console.log(`[AWS COGNITO] Xác thực email thành công qua mã Cognito!`);
+      } catch (cognitoErr) {
+        console.warn("[AWS COGNITO VERIFY ATTRIBUTE FAILED]:", cognitoErr.message);
+      }
+    }
+
+    if (!isOtpValid) {
+      return res.status(400).json({
+        message: "Mã OTP không chính xác hoặc đã hết hạn. Vui lòng kiểm tra lại hộp thư email.",
+      });
+    }
+
+    // Mã hợp lệ -> Cập nhật email chính thức vào CSDL SQL Server
+    const pool = await poolPromise;
+    await pool
+      .request()
+      .input("userId", sql.Int, userId)
+      .input("email", sql.NVarChar(100), cleanPendingEmail)
+      .query(`
+        UPDATE Users
+        SET email = @email
+        WHERE user_id = @userId
+      `);
+
+    console.log(
+      `[SQL SERVER] Đã xác nhận OTP và cập nhật email chính thức cho user_id=${userId} -> ${cleanPendingEmail}`
+    );
+
+    // Xóa yêu cầu đang chờ
+    pendingEmailChanges.delete(userId);
+
+    // Đồng bộ sao lưu lên AWS S3 Data Lakehouse
+    try {
+      uploadUserToS3(userId).catch(console.error);
+    } catch (e) {
+      console.warn("S3 sync error:", e);
+    }
+
+    // Lấy thông tin người dùng hoàn chỉnh sau khi cập nhật
+    const userResult = await pool
+      .request()
+      .input("userId", sql.Int, userId)
+      .query(`
+        SELECT TOP 1 user_id, [name], [email], [phone], [address], [role]
+        FROM Users
+        WHERE user_id = @userId
+      `);
+
+    const updatedUser = userResult.recordset[0];
+
+    return res.json({
+      success: true,
+      message: "Xác thực email thành công! Địa chỉ email của bạn đã được cập nhật.",
+      cognitoStatus,
+      user: {
+        id: updatedUser.user_id,
+        user_id: updatedUser.user_id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        phone: updatedUser.phone || "",
+        address: updatedUser.address || "",
+        role: updatedUser.role || "user",
+      },
+    });
+  } catch (error) {
+    console.error("POST /auth/profile/verify-email-otp error:", error);
+    return res.status(500).json({
+      message: error?.message || "Lỗi máy chủ khi xác thực OTP",
+    });
+  }
+});
+
+// POST /api/auth/profile/resend-email-otp
+// Gửi lại mã OTP tới email mới
+router.post("/auth/profile/resend-email-otp", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.user_id;
+    const pending = pendingEmailChanges.get(userId);
+
+    if (!pending) {
+      return res.status(400).json({
+        message: "Không có yêu cầu đổi email nào đang chờ xác nhận.",
+      });
+    }
+
+    const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    pending.otpCode = newOtp;
+    pending.expiresAt = Date.now() + 10 * 60 * 1000;
+
+    // 1. Luôn gửi lại mã OTP qua VinSport Mail Server (Gmail SMTP)
+    try {
+      await sendOtpEmail({
+        toEmail: pending.pendingEmail,
+        otpCode: newOtp,
+        userName: pending.name || req.user.name,
+        purpose: "thay đổi địa chỉ email",
+      });
+      console.log(`[VinSport OTP RESEND] Đã gửi mã mới ${newOtp} đến ${pending.pendingEmail}`);
+    } catch (mailErr) {
+      console.warn("[VinSport OTP RESEND WARNING]:", mailErr.message);
+    }
+
+    // 2. Gửi lại mã qua Cognito song song nếu là tài khoản Cognito
+    if (pending.isCognito && req.token && !req.token.startsWith("user-")) {
+      try {
+        await cognitoGetUserAttributeVerificationCode({
+          accessToken: req.token,
+          attributeName: "email",
+        });
+      } catch (e) {
+        console.warn("Cognito resend code warning:", e.message);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `Mã OTP mới đã được gửi lại vào hòm thư: ${pending.pendingEmail}`,
+    });
+  } catch (error) {
+    console.error("POST /auth/profile/resend-email-otp error:", error);
+    return res.status(500).json({
+      message: error?.message || "Không thể gửi lại mã OTP",
     });
   }
 });

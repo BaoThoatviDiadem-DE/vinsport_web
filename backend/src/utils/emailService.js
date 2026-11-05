@@ -268,7 +268,59 @@ async function sendOrderEmail(orderId, actionType = "NEW_ORDER", specificRecipie
   });
 }
 
+/**
+ * Gửi mã xác thực OTP qua Email (dùng khi đổi Email hoặc xác minh tài khoản)
+ */
+async function sendOtpEmail({
+  toEmail,
+  otpCode,
+  userName = "Quý khách",
+  purpose = "thay đổi địa chỉ email",
+}) {
+  try {
+    const transporter = createTransporter();
+    const mailOptions = {
+      from: `"VinSport Store" <${SENDER_EMAIL}>`,
+      to: toEmail,
+      subject: `[VinSport] Mã OTP xác nhận ${purpose}: ${otpCode}`,
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #ffedd5; border-radius: 20px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <div style="display: inline-block; background-color: #ea580c; color: #ffffff; font-weight: 900; font-style: italic; font-size: 20px; padding: 6px 14px; border-radius: 12px; margin-bottom: 8px;">
+              VinSport
+            </div>
+            <p style="color: #64748b; font-size: 13px; margin: 0;">Hệ thống thời trang & dụng cụ thể thao</p>
+          </div>
+          <div style="padding: 24px; background-color: #fff7ed; border-radius: 16px; border: 1px solid #ffedd5; text-align: center;">
+            <p style="color: #334155; font-size: 15px; margin-top: 0;">Xin chào <strong>${userName}</strong>,</p>
+            <p style="color: #475569; font-size: 13px; line-height: 1.6; margin-bottom: 16px;">
+              Bạn đang thực hiện yêu cầu <strong>${purpose}</strong> trên hệ thống VinSport. Vui lòng nhập mã OTP dưới đây để hoàn tất:
+            </p>
+            <div style="margin: 16px 0; font-size: 34px; font-weight: 800; letter-spacing: 8px; color: #ea580c; background: #ffffff; padding: 14px 24px; display: inline-block; border-radius: 12px; border: 2px dashed #fb923c; font-family: monospace;">
+              ${otpCode}
+            </div>
+            <p style="color: #94a3b8; font-size: 12px; margin-bottom: 0; margin-top: 14px;">
+              ⏱️ Mã này có hiệu lực trong <strong>10 phút</strong>. Vì lý do an toàn, không chia sẻ mã này cho bất kỳ ai.
+            </p>
+          </div>
+          <p style="color: #94a3b8; font-size: 11px; text-align: center; margin-top: 20px; margin-bottom: 0;">
+            Nếu bạn không yêu cầu thay đổi thông tin này, vui lòng bỏ qua email hoặc liên hệ ngay với VinSport.
+          </p>
+        </div>
+      `,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`[VinSport OTP] Đã gửi mã OTP đến ${toEmail} (MessageId: ${info.messageId})`);
+    return { success: true, messageId: info.messageId };
+  } catch (err) {
+    console.warn(`[VinSport OTP] Gửi OTP qua Gmail lỗi: ${err.message}`);
+    return { success: false, error: err.message };
+  }
+}
+
 module.exports = {
   sendOrderEmail,
+  sendOtpEmail,
   SENDER_EMAIL,
 };

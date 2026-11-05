@@ -131,9 +131,135 @@ async function cognitoLoginDirect({ email, password }) {
   });
 }
 
+/**
+ * 5. Cập nhật thông tin người dùng trên AWS Cognito
+ * Sử dụng UpdateUserAttributes với AccessToken của user
+ */
+async function cognitoUpdateUserAttributes({ accessToken, name, phone, email, address }) {
+  if (!accessToken) {
+    return { skipped: true, reason: "No access token" };
+  }
+
+  const userAttributes = [];
+
+  if (name && String(name).trim()) {
+    userAttributes.push({ Name: "name", Value: String(name).trim() });
+  }
+
+  if (phone && String(phone).trim()) {
+    let cleanPhone = String(phone).trim().replace(/[\s.-]/g, "");
+    if (cleanPhone) {
+      if (!cleanPhone.startsWith("+")) {
+        cleanPhone = cleanPhone.startsWith("0")
+          ? "+84" + cleanPhone.slice(1)
+          : "+84" + cleanPhone;
+      }
+      userAttributes.push({ Name: "phone_number", Value: cleanPhone });
+    }
+  }
+
+  if (email && String(email).trim()) {
+    userAttributes.push({ Name: "email", Value: String(email).trim().toLowerCase() });
+  }
+
+  if (address && String(address).trim()) {
+    userAttributes.push({ Name: "address", Value: String(address).trim() });
+  }
+
+  if (userAttributes.length === 0) {
+    return { success: true };
+  }
+
+  try {
+    const res = await callCognitoAPI("UpdateUserAttributes", {
+      AccessToken: accessToken,
+      UserAttributes: userAttributes,
+    });
+    console.log("[AWS COGNITO] UpdateUserAttributes success:", res);
+    return res;
+  } catch (error) {
+    console.warn("[AWS COGNITO] UpdateUserAttributes warning:", error.message);
+    // Nếu thuộc tính address hoặc phone_number bị từ chối, thử lại ưu tiên email & name
+    if (userAttributes.length > 1) {
+      if (userAttributes.some((a) => a.Name === "email")) {
+        try {
+          const emailFallback = userAttributes.filter(
+            (a) => a.Name === "email" || a.Name === "name"
+          );
+          const emailRes = await callCognitoAPI("UpdateUserAttributes", {
+            AccessToken: accessToken,
+            UserAttributes: emailFallback,
+          });
+          console.log("[AWS COGNITO] Retry UpdateUserAttributes (email & name) success:", emailRes);
+          return emailRes;
+        } catch (emailErr) {
+          console.warn("[AWS COGNITO] Retry UpdateUserAttributes (email) warning:", emailErr.message);
+        }
+      }
+
+      try {
+        const fallbackAttrs = userAttributes.filter(
+          (a) => a.Name === "name" || a.Name === "phone_number"
+        );
+        if (fallbackAttrs.length > 0) {
+          const fallbackRes = await callCognitoAPI("UpdateUserAttributes", {
+            AccessToken: accessToken,
+            UserAttributes: fallbackAttrs,
+          });
+          console.log("[AWS COGNITO] Fallback UpdateUserAttributes success:", fallbackRes);
+          return fallbackRes;
+        }
+      } catch (fallbackErr) {
+        console.warn("[AWS COGNITO] Fallback UpdateUserAttributes warning:", fallbackErr.message);
+      }
+    }
+    return { error: error.message };
+  }
+}
+
+/**
+ * 6. Xác thực mã OTP đổi email trên AWS Cognito
+ */
+async function cognitoVerifyUserAttribute({ accessToken, code, attributeName = "email" }) {
+  if (!accessToken) return { skipped: true };
+  try {
+    const res = await callCognitoAPI("VerifyUserAttribute", {
+      AccessToken: accessToken,
+      AttributeName: attributeName,
+      Code: String(code).trim(),
+    });
+    console.log("[AWS COGNITO] VerifyUserAttribute success:", res);
+    return { success: true, ...res };
+  } catch (error) {
+    console.warn("[AWS COGNITO] VerifyUserAttribute error:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * 7. Gửi lại mã xác thực thuộc tính (OTP đổi email) trên AWS Cognito
+ */
+async function cognitoGetUserAttributeVerificationCode({ accessToken, attributeName = "email" }) {
+  if (!accessToken) return { skipped: true };
+  try {
+    const res = await callCognitoAPI("GetUserAttributeVerificationCode", {
+      AccessToken: accessToken,
+      AttributeName: attributeName,
+    });
+    console.log("[AWS COGNITO] GetUserAttributeVerificationCode success:", res);
+    return { success: true, ...res };
+  } catch (error) {
+    console.warn("[AWS COGNITO] GetUserAttributeVerificationCode error:", error.message);
+    throw error;
+  }
+}
+
 module.exports = {
   cognitoSignUp,
   cognitoConfirmSignUp,
   cognitoResendCode,
   cognitoLoginDirect,
+  cognitoUpdateUserAttributes,
+  cognitoVerifyUserAttribute,
+  cognitoGetUserAttributeVerificationCode,
 };

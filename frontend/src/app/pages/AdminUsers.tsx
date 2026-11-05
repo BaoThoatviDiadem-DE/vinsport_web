@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Search, Filter, RefreshCw, Edit3, Check, Loader2 } from "lucide-react";
 import api from "../api/api";
+import { useAuth } from "../contexts/AuthContext";
 
 type UserItem = {
   id: number | string;
@@ -44,6 +45,7 @@ function normalizeUser(item: any): UserItem {
 }
 
 export default function AdminUsers() {
+  const { refreshProfile } = useAuth();
   const [users, setUsers] = useState<UserItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditingTable, setIsEditingTable] = useState(false);
@@ -372,6 +374,7 @@ export default function AdminUsers() {
       alert(`Cập nhật thành công ${modifiedUsers.length} người dùng vào cơ sở dữ liệu!`);
       setIsEditingTable(false);
       await loadUsers();
+      await refreshProfile();
     } catch (error: any) {
       console.error("Lỗi cập nhật người dùng:", error);
       alert(error?.response?.data?.message || error?.message || "Không cập nhật được người dùng");

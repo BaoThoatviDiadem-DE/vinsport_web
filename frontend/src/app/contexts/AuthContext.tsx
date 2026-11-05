@@ -37,6 +37,15 @@ interface AuthContextType {
   confirmDirect: (data: { email: string; code: string; name?: string; phone?: string; password?: string }) => Promise<any>;
   resendCodeDirect: (email: string) => Promise<any>;
   loginWithCognitoUI: () => Promise<void>;
+  updateProfile: (data: {
+    name: string;
+    email: string;
+    phone?: string;
+    address?: string;
+  }) => Promise<any>;
+  verifyEmailOtp: (otp: string, pendingEmail: string) => Promise<User>;
+  resendEmailOtp: (pendingEmail: string) => Promise<any>;
+  refreshProfile: () => Promise<User | null>;
   logout: () => void;
 }
 
@@ -271,6 +280,114 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   // 6. Đăng xuất an toàn: Xóa session cục bộ, KHÔNG gọi signoutRedirect để tránh lỗi HTTP 400
+  // 6. Cập nhật thông tin cá nhân (Đồng bộ SQL Server + AWS Cognito)
+  const updateProfile = async (data: {
+    name: string;
+    email: string;
+    phone?: string;
+    address?: string;
+  }) => {
+    try {
+      const res: any = await api.put("/auth/profile", data);
+
+      if (res?.user && !res?.requireEmailOtp) {
+        const normalized = normalizeUser(res.user);
+        localStorage.setItem("vinsport_user", JSON.stringify(normalized));
+        setUser(normalized);
+      }
+
+      if (res?.requireEmailOtp) {
+        toast(res?.message || "Vui lòng nhập mã OTP gửi về email mới!", {
+          icon: "📧",
+        });
+      } else {
+        toast.success(res?.message || "Cập nhật thông tin thành công!");
+      }
+
+      return res;
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ||
+        err.message ||
+        "Cập nhật thông tin thất bại";
+      toast.error(msg);
+      throw new Error(msg);
+    }
+  };
+
+  // 7. Xác thực mã OTP đổi email
+  const verifyEmailOtp = async (otp: string, pendingEmail: string) => {
+    try {
+      const res: any = await api.post("/auth/profile/verify-email-otp", {
+        otp,
+        pendingEmail,
+      });
+
+      if (res?.user) {
+        const normalized = normalizeUser(res.user);
+        localStorage.setItem("vinsport_user", JSON.stringify(normalized));
+        setUser(normalized);
+        toast.success(res?.message || "Xác thực email mới thành công!");
+        return normalized;
+      }
+      throw new Error("Không nhận được dữ liệu phản hồi từ máy chủ");
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ||
+        err.message ||
+        "Xác thực mã OTP thất bại";
+      toast.error(msg);
+      throw new Error(msg);
+    }
+  };
+
+  // 8. Gửi lại mã OTP đổi email
+  const resendEmailOtp = async (pendingEmail: string) => {
+    try {
+      const res: any = await api.post("/auth/profile/resend-email-otp", {
+        pendingEmail,
+      });
+      toast.success(res?.message || "Đã gửi lại mã OTP vào email!");
+      return res;
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ||
+        err.message ||
+        "Không thể gửi lại mã OTP";
+      toast.error(msg);
+      throw new Error(msg);
+    }
+  };
+
+  // 9. Luôn làm mới thông tin và vai trò (role) chính thức từ CSDL SQL Server
+  const refreshProfile = async (): Promise<User | null> => {
+    const storedToken = localStorage.getItem("vinsport_token");
+    if (!storedToken) return null;
+
+    try {
+      const res: any = await api.get("/auth/profile");
+      if (res?.user) {
+        const freshUser = normalizeUser(res.user);
+        setUser(freshUser);
+        localStorage.setItem("vinsport_user", JSON.stringify(freshUser));
+        return freshUser;
+      }
+    } catch (err: any) {
+      if (err?.response?.status === 401 || err?.response?.status === 403) {
+        console.warn("Phiên đăng nhập không hợp lệ hoặc đã hết hạn");
+      }
+    }
+    return null;
+  };
+
+  // Tự động đồng bộ quyền hạn và thông tin mới nhất từ CSDL khi khởi động ứng dụng
+  useEffect(() => {
+    const storedToken = localStorage.getItem("vinsport_token");
+    if (storedToken) {
+      refreshProfile();
+    }
+  }, []);
+
   const logout = async () => {
     setUser(null);
     localStorage.removeItem("vinsport_token");
@@ -298,6 +415,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         confirmDirect,
         resendCodeDirect,
         loginWithCognitoUI,
+        updateProfile,
+        verifyEmailOtp,
+        resendEmailOtp,
+        refreshProfile,
         logout,
       }}
     >
