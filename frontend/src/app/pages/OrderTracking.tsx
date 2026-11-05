@@ -224,7 +224,7 @@ export const OrderTracking = () => {
   });
 
   return (
-    <div className="container mx-auto px-4 py-12 max-w-5xl">
+    <div className="container mx-auto px-4 py-8 space-y-8">
       {/* 1. Header */}
       <div className="text-center mb-8">
         <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight mb-2">

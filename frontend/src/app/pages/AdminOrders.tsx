@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Filter, RefreshCw, ChevronDown, Loader2 } from "lucide-react";
+import { Search, Filter, RefreshCw, ChevronDown, Loader2, Edit3, Check } from "lucide-react";
 import api from "../api/api";
 
 type PaymentMethod = "cod" | "banking" | "momo" | string;
@@ -121,9 +121,31 @@ function orderStatusClass(status: string) {
 export default function AdminOrders() {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isEditingTable, setIsEditingTable] = useState(false);
+  const [originalOrders, setOriginalOrders] = useState<AdminOrder[]>([]);
   const [idSearch, setIdSearch] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [paymentMethodSearch, setPaymentMethodSearch] = useState("");
+
+  // State tạm thời khi đang nhập trong popup (chỉ áp dụng khi bấm Đồng ý hoặc Enter)
+  const [tempIdSearch, setTempIdSearch] = useState("");
+  const [tempCustomerSearch, setTempCustomerSearch] = useState("");
+  const [tempPaymentMethodSearch, setTempPaymentMethodSearch] = useState("");
+
+  const handleApplyIdSearch = () => {
+    setIdSearch(tempIdSearch.trim());
+    setIdSearchOpen(false);
+  };
+
+  const handleApplyCustomerSearch = () => {
+    setCustomerSearch(tempCustomerSearch.trim());
+    setCustomerSearchOpen(false);
+  };
+
+  const handleApplyPaymentMethodSearch = () => {
+    setPaymentMethodSearch(tempPaymentMethodSearch.trim());
+    setPaymentMethodSearchOpen(false);
+  };
 
   const [idSearchOpen, setIdSearchOpen] = useState(false);
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
@@ -264,6 +286,11 @@ export default function AdminOrders() {
     setOrderStatusFilters([]);
     setPaymentFilterKeyword("");
     setOrderFilterKeyword("");
+
+    setTempIdSearch("");
+    setTempCustomerSearch("");
+    setTempPaymentMethodSearch("");
+
     setIdSearchOpen(false);
     setCustomerSearchOpen(false);
     setPaymentMethodSearchOpen(false);
@@ -401,33 +428,51 @@ export default function AdminOrders() {
     }
   };
 
-  const handleUpdateOrder = async (order: AdminOrder) => {
-    try {
-      setSavingId(order.id);
+  const handleStartEdit = () => {
+    setOriginalOrders(JSON.parse(JSON.stringify(orders)));
+    setIsEditingTable(true);
+  };
 
-      await api.put(`/admin/orders/${order.id}`, {
-        paymentStatus: order.paymentStatus,
-        orderStatus: order.orderStatus,
-        paymentMethod: order.paymentMethod,
+  const handleCancelEdit = () => {
+    setOrders(originalOrders);
+    setIsEditingTable(false);
+  };
+
+  const handleSaveAllOrders = async () => {
+    try {
+      setIsUpdating(true);
+
+      const modifiedOrders = orders.filter((o) => {
+        const orig = originalOrders.find((origO) => origO.id === o.id);
+        if (!orig) return false;
+        return (
+          o.paymentStatus !== orig.paymentStatus ||
+          o.orderStatus !== orig.orderStatus
+        );
       });
 
-      alert("Cập nhật đơn hàng thành công.");
+      if (modifiedOrders.length === 0) {
+        alert("Không có thay đổi nào để cập nhật.");
+        setIsEditingTable(false);
+        return;
+      }
+
+      // Gửi yêu cầu cập nhật lên cơ sở dữ liệu
+      await Promise.all(
+        modifiedOrders.map((order) =>
+          api.put(`/admin/orders/${order.id}`, {
+            paymentStatus: order.paymentStatus,
+            orderStatus: order.orderStatus,
+            paymentMethod: order.paymentMethod || "cod",
+          })
+        )
+      );
+
+      alert(`Cập nhật thành công ${modifiedOrders.length} đơn hàng vào cơ sở dữ liệu!`);
+      setIsEditingTable(false);
       await loadOrders();
     } catch (error: any) {
       console.error("Lỗi cập nhật đơn hàng:", error);
-      alert(error?.response?.data?.message || "Không cập nhật được đơn hàng.");
-    } finally {
-      setSavingId(null);
-    }
-  };
-
-  const handleUpdateAll = async () => {
-    try {
-      setIsUpdating(true);
-      await loadOrders();
-      alert("Cập nhật danh sách đơn hàng thành công!");
-    } catch (error: any) {
-      console.error("Lỗi cập nhật:", error);
       alert(error?.response?.data?.message || "Không cập nhật được đơn hàng.");
     } finally {
       setIsUpdating(false);
@@ -435,41 +480,13 @@ export default function AdminOrders() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-6 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="w-2.5 h-6 rounded-full bg-orange-500" />
-            <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
-              Quản lý đơn hàng
-            </h1>
-          </div>
-          <p className="text-slate-500 text-sm mt-1 ml-4.5">
-            Theo dõi, cập nhật trạng thái đơn hàng và thanh toán của khách hàng.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={handleUpdateAll}
-            disabled={isLoading || isUpdating}
-            className="px-4 py-2.5 rounded-xl bg-orange-500 text-white hover:bg-orange-600 text-xs md:text-sm font-bold flex items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-50 transition-colors cursor-pointer shadow-sm shadow-orange-500/20"
-            title="Cập nhật toàn bộ đơn hàng"
-          >
-            {isUpdating ? "Đang lưu..." : "Cập nhật"}
-          </button>
-
-          <button
-            type="button"
-            onClick={loadOrders}
-            disabled={isLoading}
-            className="px-4 py-2.5 rounded-xl bg-orange-50 text-orange-600 hover:bg-orange-100 text-xs md:text-sm font-bold flex items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-50 transition-colors cursor-pointer border border-orange-200/60"
-            title="Làm mới danh sách đơn hàng"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
-            Làm mới
-          </button>
+    <div className="container mx-auto px-4 py-8 space-y-8">
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-2.5 h-6 rounded-full bg-orange-500" />
+          <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+            Quản lý đơn hàng
+          </h1>
         </div>
       </div>
 
@@ -480,15 +497,71 @@ export default function AdminOrders() {
             <h2 className="text-xl font-bold text-slate-900">Danh sách đơn hàng</h2>
           </div>
 
-          {hasActiveFilters && (
+          <div className="flex items-center gap-2.5">
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="text-xs font-semibold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200/60 px-3.5 py-2 rounded-xl transition-colors cursor-pointer"
+              >
+                Xóa tất cả lọc
+              </button>
+            )}
+
+            {!isEditingTable ? (
+              <button
+                type="button"
+                onClick={handleStartEdit}
+                disabled={isLoading}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
+                title="Bấm để chỉnh sửa trạng thái đơn hàng"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Chỉnh sửa</span>
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  disabled={isUpdating}
+                  className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold transition-all cursor-pointer disabled:opacity-50"
+                >
+                  Hủy
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSaveAllOrders}
+                  disabled={isUpdating}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                  title="Cập nhật các thay đổi vào cơ sở dữ liệu"
+                >
+                  {isUpdating ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Đang lưu...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Cập nhật</span>
+                    </>
+                  )}
+                </button>
+              </>
+            )}
+
             <button
               type="button"
-              onClick={clearAllFilters}
-              className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer"
+              onClick={loadOrders}
+              disabled={isLoading || isUpdating}
+              className="flex items-center justify-center p-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl shadow-sm transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+              title="Làm mới danh sách"
             >
-              Xóa lọc
+              <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
             </button>
-          )}
+          </div>
         </div>
 
         {isLoading ? (
@@ -507,6 +580,7 @@ export default function AdminOrders() {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (!idSearchOpen) setTempIdSearch(idSearch);
                           setIdSearchOpen((prev) => !prev);
                           closeOtherPopovers("id");
                         }}
@@ -533,22 +607,32 @@ export default function AdminOrders() {
                           <input
                             autoFocus
                             type="text"
-                            value={idSearch}
-                            onChange={(e) => setIdSearch(e.target.value)}
+                            value={tempIdSearch}
+                            onChange={(e) => setTempIdSearch(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handleApplyIdSearch();
+                              }
+                            }}
                             placeholder="Nhập mã đơn (vd: 13)..."
                             className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white mb-2"
                           />
                           <div className="flex items-center justify-between text-xs pt-1 border-t">
                             <button
                               type="button"
-                              onClick={() => setIdSearch("")}
-                              className="text-slate-500 hover:text-slate-800 font-medium"
+                              onClick={() => {
+                                setTempIdSearch("");
+                                setIdSearch("");
+                                setIdSearchOpen(false);
+                              }}
+                              className="text-slate-500 hover:text-slate-800 font-medium cursor-pointer"
                             >
                               Xóa
                             </button>
                             <button
                               type="button"
-                              onClick={() => setIdSearchOpen(false)}
+                              onClick={handleApplyIdSearch}
                               className="px-3 py-1 rounded bg-orange-500 text-white hover:bg-orange-600 font-medium cursor-pointer"
                             >
                               Đồng ý
@@ -565,6 +649,7 @@ export default function AdminOrders() {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (!customerSearchOpen) setTempCustomerSearch(customerSearch);
                           setCustomerSearchOpen((prev) => !prev);
                           closeOtherPopovers("customer");
                         }}
@@ -591,22 +676,32 @@ export default function AdminOrders() {
                           <input
                             autoFocus
                             type="text"
-                            value={customerSearch}
-                            onChange={(e) => setCustomerSearch(e.target.value)}
+                            value={tempCustomerSearch}
+                            onChange={(e) => setTempCustomerSearch(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handleApplyCustomerSearch();
+                              }
+                            }}
                             placeholder="Nhập tên, SĐT hoặc địa chỉ..."
                             className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white mb-2"
                           />
                           <div className="flex items-center justify-between text-xs pt-1 border-t">
                             <button
                               type="button"
-                              onClick={() => setCustomerSearch("")}
-                              className="text-slate-500 hover:text-slate-800 font-medium"
+                              onClick={() => {
+                                setTempCustomerSearch("");
+                                setCustomerSearch("");
+                                setCustomerSearchOpen(false);
+                              }}
+                              className="text-slate-500 hover:text-slate-800 font-medium cursor-pointer"
                             >
                               Xóa
                             </button>
                             <button
                               type="button"
-                              onClick={() => setCustomerSearchOpen(false)}
+                              onClick={handleApplyCustomerSearch}
                               className="px-3 py-1 rounded bg-orange-500 text-white hover:bg-orange-600 font-medium cursor-pointer"
                             >
                               Đồng ý
@@ -625,6 +720,7 @@ export default function AdminOrders() {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (!paymentMethodSearchOpen) setTempPaymentMethodSearch(paymentMethodSearch);
                           setPaymentMethodSearchOpen((prev) => !prev);
                           closeOtherPopovers("paymentMethod");
                         }}
@@ -651,22 +747,32 @@ export default function AdminOrders() {
                           <input
                             autoFocus
                             type="text"
-                            value={paymentMethodSearch}
-                            onChange={(e) => setPaymentMethodSearch(e.target.value)}
+                            value={tempPaymentMethodSearch}
+                            onChange={(e) => setTempPaymentMethodSearch(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handleApplyPaymentMethodSearch();
+                              }
+                            }}
                             placeholder="Nhập COD hoặc Chuyển khoản..."
                             className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white mb-2"
                           />
                           <div className="flex items-center justify-between text-xs pt-1 border-t">
                             <button
                               type="button"
-                              onClick={() => setPaymentMethodSearch("")}
-                              className="text-slate-500 hover:text-slate-800 font-medium"
+                              onClick={() => {
+                                setTempPaymentMethodSearch("");
+                                setPaymentMethodSearch("");
+                                setPaymentMethodSearchOpen(false);
+                              }}
+                              className="text-slate-500 hover:text-slate-800 font-medium cursor-pointer"
                             >
                               Xóa
                             </button>
                             <button
                               type="button"
-                              onClick={() => setPaymentMethodSearchOpen(false)}
+                              onClick={handleApplyPaymentMethodSearch}
                               className="px-3 py-1 rounded bg-orange-500 text-white hover:bg-orange-600 font-medium cursor-pointer"
                             >
                               Đồng ý
@@ -872,94 +978,106 @@ export default function AdminOrders() {
                   </tr>
                 ) : (
                   filteredOrders.map((order) => (
-                    <tr key={String(order.id)} className="hover:bg-slate-50 align-top">
-                      <td className="p-3 border-b font-semibold whitespace-nowrap">
+                    <tr key={String(order.id)} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="p-3 border-b whitespace-nowrap font-bold text-slate-400 text-sm">
                         #{order.id}
                       </td>
 
-                      <td className="p-3 border-b">
-                        <div className="font-medium text-slate-900">
+                      <td className="p-3 border-b min-w-[220px]">
+                        <div className="font-semibold text-slate-800 text-sm">
                           {order.customerName}
                         </div>
-                        <div className="text-sm text-slate-500 mt-1">
+                        <div className="text-xs text-slate-500 mt-1">
                           SĐT: {order.phone || "-"}
                         </div>
-                        <div className="text-sm text-slate-500">
+                        <div className="text-xs text-slate-500">
                           Địa chỉ: {order.address || "-"}
                         </div>
                       </td>
 
-                      <td className="p-3 border-b font-semibold whitespace-nowrap">
+                      <td className="p-3 border-b font-bold text-orange-600 text-sm whitespace-nowrap">
                         {Number(order.totalAmount || 0).toLocaleString("vi-VN")} đ
                       </td>
 
-                      <td className="p-3 border-b whitespace-nowrap">
+                      <td className="p-3 border-b text-slate-600 text-sm whitespace-nowrap">
                         {formatPaymentMethod(order.paymentMethod)}
                       </td>
 
+                      {/* Cột TT thanh toán */}
                       <td className="p-3 border-b">
-                        <div className="relative inline-flex items-center">
-                          <select
-                            value={order.paymentStatus}
-                            disabled={updatingField === `${order.id}-paymentStatus`}
-                            onChange={(e) =>
-                              handleStatusChange(order.id, "paymentStatus", e.target.value)
-                            }
-                            className={`appearance-none cursor-pointer pl-3.5 pr-8 py-1.5 rounded-full text-xs font-semibold border transition-all hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-60 disabled:cursor-not-allowed ${paymentStatusClass(
+                        {isEditingTable ? (
+                          <div className="relative inline-flex items-center">
+                            <select
+                              value={order.paymentStatus}
+                              onChange={(e) =>
+                                handleLocalStatusChange(order.id, "paymentStatus", e.target.value)
+                              }
+                              className={`appearance-none cursor-pointer pl-3.5 pr-8 py-1.5 rounded-full text-xs font-semibold border transition-all hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 ${paymentStatusClass(
+                                order.paymentStatus
+                              )}`}
+                              title="Bấm để chọn trạng thái thanh toán"
+                            >
+                              {PAYMENT_STATUS_OPTIONS.map((item) => (
+                                <option
+                                  key={item.value}
+                                  value={item.value}
+                                  className="bg-white text-slate-800 font-medium py-1"
+                                >
+                                  {item.label}
+                                </option>
+                              ))}
+                            </select>
+                            <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 pointer-events-none opacity-60" />
+                          </div>
+                        ) : (
+                          <span
+                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${paymentStatusClass(
                               order.paymentStatus
                             )}`}
-                            title="Bấm để chọn trạng thái thanh toán"
                           >
-                            {PAYMENT_STATUS_OPTIONS.map((item) => (
-                              <option
-                                key={item.value}
-                                value={item.value}
-                                className="bg-white text-slate-800 font-medium py-1"
-                              >
-                                {item.label}
-                              </option>
-                            ))}
-                          </select>
-                          {updatingField === `${order.id}-paymentStatus` ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin absolute right-2.5 pointer-events-none opacity-70" />
-                          ) : (
-                            <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 pointer-events-none opacity-60" />
-                          )}
-                        </div>
+                            {paymentStatusLabel(order.paymentStatus)}
+                          </span>
+                        )}
                       </td>
 
+                      {/* Cột TT đơn hàng */}
                       <td className="p-3 border-b">
-                        <div className="relative inline-flex items-center">
-                          <select
-                            value={order.orderStatus}
-                            disabled={updatingField === `${order.id}-orderStatus`}
-                            onChange={(e) =>
-                              handleStatusChange(order.id, "orderStatus", e.target.value)
-                            }
-                            className={`appearance-none cursor-pointer pl-3.5 pr-8 py-1.5 rounded-full text-xs font-semibold border transition-all hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-60 disabled:cursor-not-allowed ${orderStatusClass(
+                        {isEditingTable ? (
+                          <div className="relative inline-flex items-center">
+                            <select
+                              value={order.orderStatus}
+                              onChange={(e) =>
+                                handleLocalStatusChange(order.id, "orderStatus", e.target.value)
+                              }
+                              className={`appearance-none cursor-pointer pl-3.5 pr-8 py-1.5 rounded-full text-xs font-semibold border transition-all hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 ${orderStatusClass(
+                                order.orderStatus
+                              )}`}
+                              title="Bấm để chọn trạng thái đơn hàng"
+                            >
+                              {ORDER_STATUS_OPTIONS.map((item) => (
+                                <option
+                                  key={item.value}
+                                  value={item.value}
+                                  className="bg-white text-slate-800 font-medium py-1"
+                                >
+                                  {item.label}
+                                </option>
+                              ))}
+                            </select>
+                            <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 pointer-events-none opacity-60" />
+                          </div>
+                        ) : (
+                          <span
+                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${orderStatusClass(
                               order.orderStatus
                             )}`}
-                            title="Bấm để chọn trạng thái đơn hàng"
                           >
-                            {ORDER_STATUS_OPTIONS.map((item) => (
-                              <option
-                                key={item.value}
-                                value={item.value}
-                                className="bg-white text-slate-800 font-medium py-1"
-                              >
-                                {item.label}
-                              </option>
-                            ))}
-                          </select>
-                          {updatingField === `${order.id}-orderStatus` ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin absolute right-2.5 pointer-events-none opacity-70" />
-                          ) : (
-                            <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 pointer-events-none opacity-60" />
-                          )}
-                        </div>
+                            {orderStatusLabel(order.orderStatus)}
+                          </span>
+                        )}
                       </td>
 
-                      <td className="p-3 border-b font-semibold whitespace-nowrap">
+                      <td className="p-3 border-b text-slate-600 text-sm whitespace-nowrap">
                         {formatDate(order.createdAt)}
                       </td>
                     </tr>
