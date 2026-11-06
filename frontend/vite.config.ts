@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+﻿import { defineConfig } from 'vite'
 import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
@@ -27,8 +27,22 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
-    strictPort: true,
+  host: '127.0.0.1',
+  port: 5173,
+  strictPort: true,
+  allowedHosts: [],
+  proxy: {
+    '/api': {
+      target: 'http://127.0.0.1:5000',
+      changeOrigin: true,
+      configure: (proxy) => {
+        proxy.on('proxyReq', (proxyReq) => {
+          proxyReq.removeHeader('origin')
+        })
+      },
+    },
   },
+},
   assetsInclude: ['**/*.svg', '**/*.csv'],
 })
+

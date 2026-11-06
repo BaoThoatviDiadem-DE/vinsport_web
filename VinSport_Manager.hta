@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>VinSport Control Panel</title>
+    <title>VINSPORT Control Center</title>
     <meta charset="utf-8">
+
     <HTA:APPLICATION
-        APPLICATIONNAME="VinSport Control Panel"
-        SCROLL="no"
+        APPLICATIONNAME="VINSPORT Control Center"
+        SCROLL="yes"
         SINGLEINSTANCE="yes"
         WINDOWSTATE="normal"
         INNERBORDER="no"
@@ -13,208 +14,733 @@
         MAXIMIZEBUTTON="no"
         MINIMIZEBUTTON="yes"
     >
+
     <style>
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background-color: #f0f2f5; 
-            margin: 0; 
-            padding: 20px; 
-            text-align: center; 
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 18px;
+            font-family: "Segoe UI", Tahoma, sans-serif;
+            background: #eef2f7;
+            color: #263445;
         }
-        .container { 
-            background-color: white; 
-            padding: 20px 35px; 
-            border-radius: 12px; 
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
-            display: inline-block; 
-            text-align: left;
-            min-width: 360px;
+
+        .container {
+            width: 100%;
+            max-width: 650px;
+            margin: auto;
+            background: #fff;
+            border-radius: 15px;
+            padding: 22px;
+            box-shadow: 0 5px 22px rgba(20, 40, 70, .10);
         }
-        h2 { color: #1a73e8; margin-top: 0; border-bottom: 2px solid #f0f2f5; padding-bottom: 10px; }
-        .btn { 
-            display: block; 
-            width: 100%; 
-            padding: 11px; 
-            margin: 8px 0; 
-            border: none; 
-            border-radius: 8px; 
-            font-size: 14px; 
-            font-weight: bold; 
-            cursor: pointer; 
-            color: white; 
-            transition: background 0.2s, transform 0.1s; 
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #e7edf4;
+            padding-bottom: 15px;
+            margin-bottom: 15px;
         }
-        .btn:active { transform: scale(0.98); }
-        .btn-green { background-color: #28a745; }
-        .btn-green:hover { background-color: #218838; }
-        .btn-red { background-color: #dc3545; }
-        .btn-red:hover { background-color: #c82333; }
-        .btn-blue { background-color: #007bff; }
-        .btn-blue:hover { background-color: #0069d9; }
-        .btn-orange { background-color: #fd7e14; }
-        .btn-orange:hover { background-color: #e85e0c; }
-        .btn-purple { background-color: #6f42c1; }
-        .btn-purple:hover { background-color: #593196; }
-        .section-title { margin-top: 18px; margin-bottom: 6px; font-size: 13px; color: #5f6368; font-weight: bold; text-transform: uppercase;}
-        .status-box { font-size: 13px; margin-bottom: 6px; color: #666; }
+
+        h1 {
+            font-size: 22px;
+            margin: 0;
+            color: #174ea6;
+        }
+
+        .subtitle {
+            font-size: 12px;
+            color: #778396;
+            margin-top: 5px;
+        }
+
+        .version {
+            font-size: 11px;
+            color: #64748b;
+            background: #edf2f8;
+            padding: 6px 9px;
+            border-radius: 20px;
+        }
+
+        .section {
+            margin-top: 19px;
+        }
+
+        .section-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #66758a;
+            letter-spacing: .5px;
+            margin-bottom: 10px;
+        }
+
+        .grid {
+            display: flex;
+            gap: 10px;
+        }
+
+        .grid > button {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .btn {
+            border: none;
+            border-radius: 8px;
+            padding: 12px 10px;
+            width: 100%;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            color: white;
+            margin-bottom: 8px;
+        }
+
+        .btn:disabled {
+            opacity: .45;
+            cursor: not-allowed;
+        }
+
+        .green { background: #16834a; }
+        .green:hover { background: #116d3d; }
+
+        .blue { background: #2563c7; }
+        .blue:hover { background: #1d4fa4; }
+
+        .orange { background: #e87918; }
+        .orange:hover { background: #c65d0b; }
+
+        .red { background: #d43c43; }
+        .red:hover { background: #b92d34; }
+
+        .purple { background: #7046bd; }
+        .purple:hover { background: #59369b; }
+
+        .gray { background: #64748b; }
+        .gray:hover { background: #475569; }
+
+        .panel {
+            background: #f7f9fc;
+            border: 1px solid #e5eaf1;
+            border-radius: 10px;
+            padding: 13px;
+        }
+
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 7px 0;
+            border-bottom: 1px solid #e8edf3;
+            font-size: 13px;
+        }
+
+        .status-row:last-child {
+            border-bottom: none;
+        }
+
+        .status-value {
+            font-weight: 700;
+            color: #64748b;
+        }
+
+        .running { color: #16834a; }
+        .stopped { color: #d43c43; }
+        .checking { color: #d97706; }
+
+        .url-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d7e0eb;
+            border-radius: 7px;
+            background: white;
+            font-size: 12px;
+            color: #2457a6;
+            margin-top: 7px;
+        }
+
+        .hint {
+            font-size: 11px;
+            color: #8491a2;
+            margin-top: 7px;
+            line-height: 1.5;
+        }
+
+        .message {
+            display: none;
+            background: #fff7e8;
+            border: 1px solid #f5d69b;
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 12px;
+            color: #975b08;
+            margin-top: 10px;
+        }
+
+        .footer {
+            text-align: center;
+            color: #9aa5b3;
+            font-size: 10px;
+            margin-top: 20px;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #e7edf4;
+            margin: 17px 0;
+        }
     </style>
+
     <script language="VBScript">
-        Window.resizeTo 470, 720
+        Dim objShell
         Set objShell = CreateObject("WScript.Shell")
-        
+
         Function GetAppDir()
             Dim fso, p
             Set fso = CreateObject("Scripting.FileSystemObject")
+
             p = document.location.pathname
             p = Replace(p, "/", "\")
+
             If Left(p, 1) = "\" And Mid(p, 3, 1) = ":" Then
                 p = Mid(p, 2)
             End If
+
             p = Unescape(p)
             GetAppDir = fso.GetParentFolderName(p)
         End Function
-        
+
         Sub Window_OnLoad
-            ' Tự động chạy Airflow ngầm khi người dùng vừa mở bảng điều khiển
             Dim appDir
             appDir = GetAppDir()
+
+            ' Giữ hành vi tự khởi động Airflow như phiên bản cũ.
             objShell.Run "cmd /c cd /d """ & appDir & """ && docker-compose up -d", 0, False
         End Sub
-        
+
         Sub Window_OnBeforeUnload
-            ' Tự động tắt Airflow ngầm khi người dùng bấm dấu X để đóng bảng điều khiển
-            Dim appDir
-            appDir = GetAppDir()
-            objShell.Run "cmd /c cd /d """ & appDir & """ && docker-compose down", 0, False
-            ' Tắt các tiến trình Node.js đang chạy ngầm (Backend, Frontend)
-            objShell.Run "cmd /c taskkill /F /IM node.exe /T >nul 2>&1", 0, False
-        End Sub
-        
-        Sub StartAirflow
-            Dim appDir
-            appDir = GetAppDir()
-            objShell.Run "cmd /c """"" & appDir & "\start_airflow.bat""""", 0, False
-            MsgBox "Đã gửi lệnh! Hệ thống đang tự động mở Docker và sẽ chờ cho đến khi nó sẵn sàng để bật Airflow." & vbCrLf & "Bạn không cần làm gì thêm, chỉ cần chờ thanh trạng thái báo '🟢 Đang chạy'.", 64, "VinSport"
-        End Sub
-
-        Sub StopAirflow
-            Dim appDir
-            appDir = GetAppDir()
-            objShell.Run "cmd /c cd /d """ & appDir & """ && docker-compose down", 0, False
-            MsgBox "Đã gửi lệnh tắt luồng dữ liệu (Docker). Quá trình tắt đang được chạy ngầm.", 64, "VinSport"
-        End Sub
-
-        Sub InitDatabase
-            Dim ans
-            ans = MsgBox("⚠️ CẢNH BÁO: Thao tác này sẽ làm mới (Reset) toàn bộ Cơ sở dữ liệu về trạng thái mẫu ban đầu!" & vbCrLf & vbCrLf & _
-                         "• Nếu bạn vừa tải mã nguồn về: Bấm [Yes] để nạp CSDL." & vbCrLf & _
-                         "• Nếu máy bạn ĐÃ CÓ dữ liệu rồi: Bấm [No] để hủy bỏ." & vbCrLf & vbCrLf & _
-                         "Bạn có chắc chắn muốn tiếp tục không?", 36, "Xác nhận Khởi tạo CSDL")
-            If ans <> 6 Then Exit Sub
-            
             Dim appDir, cmd
+
             appDir = GetAppDir()
-            cmd = "cmd /c cd /d """ & appDir & "\backend"" && npm run db:init && echo. && echo ======================================================== && echo [HOAN TAT] Nhan phim bat ky de dong cua so nay... && pause >nul"
-            objShell.Run cmd, 1, False
-        End Sub
 
-        Sub LaunchNodeServers
-            Dim appDir
-            appDir = GetAppDir()
-            ' Dọn dẹp sạch sẽ các tiến trình ngầm cũ (nếu có) trước khi chạy mới
-            objShell.Run "cmd /c taskkill /F /IM node.exe /T >nul 2>&1", 0, True
-            ' Khởi động ngầm Backend và Frontend
-            objShell.Run "cmd /c cd /d """ & appDir & "\backend"" && npm run dev", 0, False
-            objShell.Run "cmd /c cd /d """ & appDir & "\frontend"" && npm run dev", 0, False
-        End Sub
+            ' Chỉ dừng các tiến trình do Process Manager quản lý.
+            cmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File """ & _
+                  appDir & "\VinSport_Process_Manager.ps1"" -Mode Stop"
 
-        Sub OpenBrowser(url)
-            objShell.Run "cmd /c start " & url, 0, False
-        End Sub
+            objShell.Run cmd, 0, False
 
-        Sub OpenAirflowWeb
-            objShell.Run "http://localhost:8080"
+            ' Giữ hành vi tắt Airflow khi đóng HTA.
+            objShell.Run "cmd /c cd /d """ & appDir & """ && docker-compose down", 0, False
         End Sub
     </script>
+
     <script language="JavaScript">
-        function checkAirflowStatus() {
+        var shell = new ActiveXObject("WScript.Shell");
+        var activeStartupMode = "";
+        var startupDeadline = 0;
+
+        var backendReady = false;
+        var frontendReady = false;
+        var tunnelReady = false;
+
+        var backendChecking = false;
+        var frontendChecking = false;
+        var airflowChecking = false;
+
+        var currentPublicUrl = "";
+
+        function appDirectory() {
+            var fso = new ActiveXObject("Scripting.FileSystemObject");
+            var path = decodeURIComponent(location.pathname.replace(/\//g, "\\"));
+
+            if (path.charAt(0) == "\\" && path.charAt(2) == ":") {
+                path = path.substring(1);
+            }
+
+            return fso.GetParentFolderName(path);
+        }
+
+        function runManager(mode) {
+            var scriptPath = appDirectory() + "\\VinSport_Process_Manager.ps1";
+
+            if (!(new ActiveXObject("Scripting.FileSystemObject")).FileExists(scriptPath)) {
+                alert("Không tìm thấy VinSport_Process_Manager.ps1");
+                return false;
+            }
+
+            var command =
+                'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' +
+                scriptPath + '" -Mode ' + mode;
+
+            shell.Run(command, 0, false);
+            return true;
+        }
+
+        function setStatus(id, text, cssClass) {
+            var element = document.getElementById(id);
+            element.innerHTML = text;
+            element.className = "status-value " + cssClass;
+        }
+
+        function readPublicUrl() {
+            try {
+                var fso = new ActiveXObject("Scripting.FileSystemObject");
+                var appData = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%");
+                var path = appData + "\\VinSportControlPanel\\process-state.json";
+
+                if (!fso.FileExists(path)) return "";
+
+                var file = fso.OpenTextFile(path, 1, false, -2);
+                var content = file.ReadAll();
+                file.Close();
+
+                var match = content.match(/"PublicUrl"\s*:\s*"([^"]*)"/i);
+
+                if (match && match[1]) {
+                    return match[1];
+                }
+            }
+            catch (e) {}
+
+            return "";
+        }
+
+        function checkHttp(url, callback) {
             try {
                 var xhr = new ActiveXObject("MSXML2.XMLHTTP");
-                xhr.open("GET", "http://localhost:8080/health", true);
+
+                xhr.open("GET", url, true);
+
                 xhr.onreadystatechange = function() {
                     if (xhr.readyState == 4) {
-                        var statusEl = document.getElementById("airflow-status");
-                        if (xhr.status == 200) {
-                            statusEl.innerHTML = "Trạng thái: <span style='color:#28a745;font-weight:bold'>🟢 Đang chạy</span>";
-                        } else {
-                            statusEl.innerHTML = "Trạng thái: <span style='color:#dc3545;font-weight:bold'>🔴 Đã tắt (hoặc đang khởi động...)</span>";
-                        }
+                        callback(xhr.status >= 200 && xhr.status < 400);
                     }
                 };
+
                 xhr.send();
-            } catch (e) {
-                document.getElementById("airflow-status").innerHTML = "Trạng thái: <span style='color:#dc3545;font-weight:bold'>🔴 Đã tắt</span>";
+            }
+            catch (e) {
+                callback(false);
             }
         }
-        
-        function startWebAppWithDelay() {
-            var btn = document.getElementById("btn-start-web");
-            var statusEl = document.getElementById("web-status");
 
-            // 1. Kích hoạt Backend & Frontend chạy ngầm
-            LaunchNodeServers();
+        function checkTunnelProcess() {
+            try {
+                var locator = new ActiveXObject("WbemScripting.SWbemLocator");
+                var service = locator.ConnectServer(".", "root\\cimv2");
 
-            // 2. Cập nhật giao diện đếm ngược 3 giây
-            btn.disabled = true;
-            btn.style.opacity = "0.7";
-            btn.style.cursor = "wait";
-            statusEl.style.display = "block";
+                var processes = service.ExecQuery(
+                    "SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name='cloudflared.exe'"
+                );
 
-            var countdown = 3;
-            statusEl.innerHTML = "Trạng thái: <span style='color:#fd7e14;font-weight:bold'>⏳ Đang load CSDL, Backend & Frontend (" + countdown + "s)...</span>";
-            btn.innerHTML = "⏳ Đang nạp hệ thống (" + countdown + "s)...";
+                var item = new Enumerator(processes);
 
-            var timer = window.setInterval(function() {
-                countdown--;
-                if (countdown > 0) {
-                    statusEl.innerHTML = "Trạng thái: <span style='color:#fd7e14;font-weight:bold'>⏳ Đang load CSDL, Backend & Frontend (" + countdown + "s)...</span>";
-                    btn.innerHTML = "⏳ Đang nạp hệ thống (" + countdown + "s)...";
-                } else {
-                    window.clearInterval(timer);
-                    statusEl.innerHTML = "Trạng thái: <span style='color:#28a745;font-weight:bold'>🟢 Website đã load đầy đủ & sẵn sàng!</span>";
-                    btn.innerHTML = "🚀 Khởi động lại Website Bán Hàng";
-                    btn.disabled = false;
-                    btn.style.opacity = "1";
-                    btn.style.cursor = "pointer";
+                for (; !item.atEnd(); item.moveNext()) {
+                    var process = item.item();
+                    var command = String(process.CommandLine || "");
 
-                    // 3. Đúng 3 giây sau, mở trình duyệt vào localhost:5173
-                    OpenBrowser("http://localhost:5173");
+                    if (command.indexOf("tunnel --url http://127.0.0.1:5173") >= 0) {
+                        return true;
+                    }
                 }
-            }, 1000);
+            }
+            catch (e) {}
+
+            return false;
         }
 
-        window.setTimeout(checkAirflowStatus, 500);
-        window.setInterval(checkAirflowStatus, 1000);
+        function refreshWebsiteStatus() {
+            currentPublicUrl = readPublicUrl();
+
+            document.getElementById("public-url").value =
+                currentPublicUrl || "Chưa có Public URL";
+
+            if (!backendChecking) {
+                backendChecking = true;
+
+                checkHttp("http://127.0.0.1:5000/", function(ok) {
+                    backendReady = ok;
+                    setStatus(
+                        "backend-status",
+                        ok ? "● Running" : "● Stopped",
+                        ok ? "running" : "stopped"
+                    );
+                    backendChecking = false;
+                    evaluateStartup();
+                });
+            }
+
+            if (!frontendChecking) {
+                frontendChecking = true;
+
+                checkHttp("http://127.0.0.1:5173/", function(ok) {
+                    frontendReady = ok;
+                    setStatus(
+                        "frontend-status",
+                        ok ? "● Running" : "● Stopped",
+                        ok ? "running" : "stopped"
+                    );
+                    frontendChecking = false;
+                    evaluateStartup();
+                });
+            }
+
+            tunnelReady = checkTunnelProcess();
+
+            setStatus(
+                "tunnel-status",
+                tunnelReady ? "● Running" : "● Stopped",
+                tunnelReady ? "running" : "stopped"
+            );
+
+            evaluateStartup();
+        }
+
+        function evaluateStartup() {
+            if (!activeStartupMode) return;
+
+            var ready =
+                backendReady &&
+                frontendReady &&
+                (activeStartupMode != "Public" || (tunnelReady && currentPublicUrl != ""));
+
+            if (ready) {
+                var mode = activeStartupMode;
+                activeStartupMode = "";
+
+                document.getElementById("startup-message").style.display = "none";
+                setButtonsEnabled(true);
+
+                if (mode == "Public") {
+                    openWebsite(currentPublicUrl);
+                    showMessage("Public Website đã sẵn sàng.");
+                }
+                else {
+                    openWebsite("http://localhost:5173");
+                    showMessage("Local Website đã sẵn sàng.");
+                }
+
+                return;
+            }
+
+            if (new Date().getTime() > startupDeadline) {
+                activeStartupMode = "";
+                setButtonsEnabled(true);
+
+                showMessage(
+                    "Quá thời gian chờ khởi động. Kiểm tra PowerShell và log của Process Manager."
+                );
+            }
+        }
+
+        function setButtonsEnabled(enabled) {
+            document.getElementById("btn-local").disabled = !enabled;
+            document.getElementById("btn-public").disabled = !enabled;
+        }
+
+        function showMessage(message) {
+            var el = document.getElementById("startup-message");
+            el.innerHTML = message;
+            el.style.display = "block";
+        }
+
+        function startWebsite(mode) {
+            if (activeStartupMode) return;
+
+            backendReady = false;
+            frontendReady = false;
+            tunnelReady = false;
+
+            activeStartupMode = mode;
+            startupDeadline = new Date().getTime() + 300000;
+
+            setButtonsEnabled(false);
+
+            showMessage(
+                mode == "Public"
+                ? "Đang khởi động Backend, Cloudflare Tunnel và Frontend..."
+                : "Đang khởi động Backend và Frontend..."
+            );
+
+            var managerMode = mode == "Public" ? "StartPublic" : "StartLocal";
+
+            if (!runManager(managerMode)) {
+                activeStartupMode = "";
+                setButtonsEnabled(true);
+                return;
+            }
+
+            refreshWebsiteStatus();
+        }
+
+        function stopWebsite() {
+            if (!confirm("Bạn muốn dừng toàn bộ Website VINSPORT?")) return;
+
+            activeStartupMode = "";
+            runManager("Stop");
+
+            showMessage("Đã gửi lệnh dừng Website.");
+            setButtonsEnabled(true);
+        }
+
+        function stopTunnel() {
+            if (!tunnelReady) {
+                alert("Cloudflare Tunnel hiện không chạy.");
+                return;
+            }
+
+            if (!confirm("Dừng Cloudflare Tunnel? Backend và Frontend vẫn tiếp tục chạy.")) {
+                return;
+            }
+
+            runManager("StopTunnel");
+            showMessage("Đã gửi lệnh dừng Tunnel. Backend và Frontend được giữ nguyên.");
+        }
+
+        function openWebsite(url) {
+            if (!url || url.indexOf("http") != 0) {
+                alert("URL không hợp lệ.");
+                return;
+            }
+
+            shell.Run('cmd /c start "" "' + url + '"', 0, false);
+        }
+
+        function openSelectedWebsite() {
+            if (currentPublicUrl && tunnelReady) {
+                openWebsite(currentPublicUrl);
+            }
+            else if (frontendReady) {
+                openWebsite("http://localhost:5173");
+            }
+            else {
+                alert("Website chưa sẵn sàng.");
+            }
+        }
+
+        function copyPublicUrl() {
+            if (!currentPublicUrl) {
+                alert("Chưa có Public URL.");
+                return;
+            }
+
+            try {
+                window.clipboardData.setData("Text", currentPublicUrl);
+                showMessage("Đã sao chép Public URL.");
+            }
+            catch (e) {
+                alert("Không thể sao chép URL: " + e.message);
+            }
+        }
+
+        function initDatabase() {
+            var answer = confirm(
+                "CẢNH BÁO: Thao tác này có thể Reset toàn bộ dữ liệu SQL Server về trạng thái mẫu ban đầu.\n\n" +
+                "Chỉ tiếp tục nếu bạn hiểu rõ tác động của script db:init.\n\n" +
+                "Bạn có chắc chắn muốn tiếp tục?"
+            );
+
+            if (!answer) return;
+
+            var appDir = appDirectory();
+
+            var command =
+                'cmd /c cd /d "' + appDir +
+                '\\backend" && npm.cmd run db:init && echo. && ' +
+                'echo ================================================ && ' +
+                'echo HOAN TAT - Nhan phim bat ky de dong cua so nay && pause >nul';
+
+            shell.Run(command, 1, false);
+        }
+
+        function startAirflow() {
+            var appDir = appDirectory();
+
+            shell.Run(
+                'cmd /c ""' + appDir + '\\start_airflow.bat""',
+                0,
+                false
+            );
+
+            showMessage("Đã gửi lệnh khởi động Airflow.");
+        }
+
+        function stopAirflow() {
+            if (!confirm("Bạn muốn dừng toàn bộ Docker Compose Airflow?")) return;
+
+            var appDir = appDirectory();
+
+            shell.Run(
+                'cmd /c cd /d "' + appDir + '" && docker-compose down',
+                0,
+                false
+            );
+
+            showMessage("Đã gửi lệnh dừng Airflow.");
+        }
+
+        function openAirflow() {
+            openWebsite("http://localhost:8080");
+        }
+
+        function checkAirflowStatus() {
+            if (airflowChecking) return;
+
+            airflowChecking = true;
+
+            checkHttp("http://localhost:8080/health", function(ok) {
+                setStatus(
+                    "airflow-status",
+                    ok ? "● Running" : "● Stopped",
+                    ok ? "running" : "stopped"
+                );
+
+                airflowChecking = false;
+            });
+        }
+
+        function refreshAll() {
+            refreshWebsiteStatus();
+            checkAirflowStatus();
+        }
+
+        window.setTimeout(refreshAll, 1000);
+        window.setInterval(refreshAll, 3000);
     </script>
 </head>
+
 <body>
     <div class="container">
-        <h2>⚙️ VinSport Manager</h2>
-        <p style="color: #666; font-size: 13px;">Bảng điều khiển hệ thống tập trung.</p>
 
-        <div class="section-title">🗄️ CƠ SỞ DỮ LIỆU SQL SERVER</div>
-        <button class="btn btn-purple" onclick="InitDatabase()">⚡ Nạp / Khởi tạo toàn bộ CSDL (1-Click)</button>
-        
-        <div class="section-title">🛒 HỆ THỐNG WEBSITE</div>
-        <div id="web-status" class="status-box" style="display:none;">Trạng thái: <span>Chưa khởi động</span></div>
-        <button id="btn-start-web" class="btn btn-orange" onclick="startWebAppWithDelay()">🚀 Khởi động Website Bán Hàng</button>
-        <button class="btn btn-blue" onclick="OpenBrowser('http://localhost:5173')">🌐 Mở trang Website (localhost:5173)</button>
-        
-        <div class="section-title">📦 HỆ THỐNG DỮ LIỆU (AIRFLOW)</div>
-        <div id="airflow-status" class="status-box">Trạng thái: <span>⏳ Đang kiểm tra...</span></div>
-        <button class="btn btn-green" onclick="StartAirflow()">▶ Bật hệ thống Dữ liệu</button>
-        <button class="btn btn-blue" onclick="OpenAirflowWeb()">🌐 Mở trang quản trị Airflow</button>
-        <button class="btn btn-red" onclick="StopAirflow()">⏹ Tắt hệ thống Dữ liệu</button>
+        <div class="header">
+            <div>
+                <h1>VINSPORT</h1>
+                <div class="subtitle">System Control Center</div>
+            </div>
+            <div class="version">CONTROL PANEL</div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">WEBSITE DEPLOYMENT</div>
+
+            <div class="grid">
+                <button id="btn-local" class="btn green"
+                    onclick="startWebsite('Local')">
+                    START LOCAL
+                </button>
+
+                <button id="btn-public" class="btn orange"
+                    onclick="startWebsite('Public')">
+                    START PUBLIC
+                </button>
+            </div>
+
+            <div id="startup-message" class="message"></div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">SERVICE MONITORING</div>
+
+            <div class="panel">
+                <div class="status-row">
+                    <span>Backend - Express :5000</span>
+                    <span id="backend-status" class="status-value checking">Checking...</span>
+                </div>
+
+                <div class="status-row">
+                    <span>Frontend - Vite :5173</span>
+                    <span id="frontend-status" class="status-value checking">Checking...</span>
+                </div>
+
+                <div class="status-row">
+                    <span>Cloudflare Tunnel</span>
+                    <span id="tunnel-status" class="status-value checking">Checking...</span>
+                </div>
+
+                <div class="status-row">
+                    <span>Apache Airflow :8080</span>
+                    <span id="airflow-status" class="status-value checking">Checking...</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">PUBLIC WEBSITE URL</div>
+
+            <input
+                id="public-url"
+                class="url-input"
+                type="text"
+                readonly
+                value="Chưa có Public URL"
+            >
+
+            <div class="grid" style="margin-top: 9px;">
+                <button class="btn blue" onclick="copyPublicUrl()">
+                    COPY URL
+                </button>
+
+                <button class="btn blue" onclick="openSelectedWebsite()">
+                    OPEN WEBSITE
+                </button>
+            </div>
+
+            <div class="grid">
+                <button class="btn gray" onclick="stopTunnel()">
+                    STOP TUNNEL
+                </button>
+
+                <button class="btn red" onclick="stopWebsite()">
+                    STOP WEBSITE
+                </button>
+            </div>
+
+            <div class="hint">
+                Stop Tunnel chỉ dừng kết nối Internet công khai.
+                Backend và Frontend vẫn tiếp tục hoạt động.
+            </div>
+        </div>
+
+        <hr>
+
+        <div class="section">
+            <div class="section-title">SQL SERVER DATABASE</div>
+
+            <button class="btn purple" onclick="initDatabase()">
+                INITIALIZE DATABASE
+            </button>
+
+            <div class="hint">
+                Chỉ chạy khi cần khởi tạo hoặc nạp lại dữ liệu mẫu.
+                Hãy kiểm tra nội dung script db:init trước khi xác nhận.
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">DATA ENGINEERING - AIRFLOW</div>
+
+            <div class="grid">
+                <button class="btn green" onclick="startAirflow()">
+                    START AIRFLOW
+                </button>
+
+                <button class="btn blue" onclick="openAirflow()">
+                    OPEN AIRFLOW
+                </button>
+
+                <button class="btn red" onclick="stopAirflow()">
+                    STOP AIRFLOW
+                </button>
+            </div>
+        </div>
+
+        <div class="footer">
+            VINSPORT CONTROL CENTER | LOCAL + CLOUD INFRASTRUCTURE
+        </div>
+
     </div>
 </body>
 </html>

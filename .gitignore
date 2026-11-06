@@ -22,7 +22,7 @@ backend/.env
 # AWS Credentials & sensitive scripts
 data/01_setup_s3_credential.sql
 data/download_backup.py
-
+*.local.*
 # Logs
 logs/
 *.log

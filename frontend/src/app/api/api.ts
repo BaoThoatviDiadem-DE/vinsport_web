@@ -1,7 +1,7 @@
-import axios from "axios";
+﻿import axios from "axios";
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api",
+  baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
   headers: {
     "Content-Type": "application/json",
   },
@@ -25,7 +25,7 @@ api.interceptors.response.use(
   (response) => response.data,
   (error) => {
     const errorDetails = error?.response?.data?.message || error.message;
-    console.error("Lỗi kết nối hệ thống VinSport:", errorDetails);
+    console.error("Lá»—i káº¿t ná»‘i há»‡ thá»‘ng VinSport:", errorDetails);
 
     if (error?.response?.status === 401 && !error.config?.url?.includes("/auth/link")) {
       localStorage.removeItem("vinsport_token");
@@ -37,3 +37,4 @@ api.interceptors.response.use(
 );
 
 export default api;
+
