@@ -7,12 +7,18 @@ const {
   updateAdminOrder,
   updateAdminOrderStatus,
   updateAdminPaymentStatus,
+  deleteAdminOrder,
+  deleteAdminOrdersBatch,
 } = require("../controllers/adminOrderController");
 
 router.get("/", verifyToken, requireAdmin, getAdminOrders);
 
 // cập nhật cả TT thanh toán + TT đơn hàng bằng 1 nút
 router.put("/:id", verifyToken, requireAdmin, updateAdminOrder);
+
+// xóa đơn hàng
+router.delete("/:id", verifyToken, requireAdmin, deleteAdminOrder);
+router.post("/batch-delete", verifyToken, requireAdmin, deleteAdminOrdersBatch);
 
 // vẫn giữ 2 endpoint riêng
 router.put("/:id/status", verifyToken, requireAdmin, updateAdminOrderStatus);

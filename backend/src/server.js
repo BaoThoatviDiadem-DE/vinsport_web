@@ -12,9 +12,11 @@ const adminProductRoutes = require("./routes/adminProductRoutes");
 const adminUserRoutes = require("./routes/adminUserRoutes");
 const adminOrderRoutes = require("./routes/adminOrderRoutes");
 const adminAnalyticsRoutes = require("./routes/adminAnalyticsRoutes");
+const adminVoucherRoutes = require("./routes/adminVoucherRoutes");
 const recentlyViewedRoutes = require("./routes/recentlyViewedRoutes");
 const cartRoutes = require("./routes/cartRoutes");
 const otpRoutes = require("./routes/otpRoutes");
+const lambdaRoutes = require("./routes/lambdaRoutes");
 const { sendTechnicalAlert } = require("./utils/snsService");
 const { startOrderWorker } = require("./utils/sqsService");
 const { ensureAllDynamoTables } = require("./utils/dynamoService");
@@ -47,9 +49,11 @@ app.use("/api/admin/products", adminProductRoutes);
 app.use("/api/admin/users", adminUserRoutes);
 app.use("/api/admin/orders", adminOrderRoutes);
 app.use("/api/admin/analytics", adminAnalyticsRoutes);
+app.use("/api/admin/vouchers", adminVoucherRoutes);
 app.use("/api/recently-viewed", recentlyViewedRoutes);
 app.use("/api", cartRoutes);
 app.use("/api", otpRoutes);
+app.use("/api/lambda", lambdaRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

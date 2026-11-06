@@ -9,6 +9,7 @@ build/
 .vite/
 frontend/dist/
 backend/dist/
+backend/dist-lambda/
 
 # Env files & AWS Secrets
 .env

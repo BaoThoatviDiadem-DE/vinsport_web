@@ -9,6 +9,7 @@ const {
   GetCommand,
   PutCommand,
   DeleteCommand,
+  ScanCommand,
 } = require("@aws-sdk/lib-dynamodb");
 const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
@@ -17,10 +18,11 @@ const REGION = (process.env.AWS_REGION || "ap-southeast-1").trim();
 const ACCESS_KEY = (process.env.AWS_ACCESS_KEY_ID || "").trim();
 const SECRET_KEY = (process.env.AWS_SECRET_ACCESS_KEY || "").trim();
 
-// Tên 3 bảng DynamoDB
+// Tên 4 bảng DynamoDB
 const TABLE_RECENTLY_VIEWED = (process.env.DYNAMODB_TABLE_RECENTLY_VIEWED || "VinSport_RecentlyViewed").trim();
 const TABLE_CARTS = (process.env.DYNAMODB_TABLE_CARTS || "VinSport_Carts").trim();
 const TABLE_OTP = (process.env.DYNAMODB_TABLE_OTP || "VinSport_OTP").trim();
+const TABLE_VOUCHERS = (process.env.DYNAMODB_TABLE_VOUCHERS || "VinSport_Vouchers").trim();
 
 let docClient = null;
 
@@ -121,6 +123,7 @@ async function ensureAllDynamoTables() {
       ensureTable(TABLE_RECENTLY_VIEWED, "userId"),
       ensureTable(TABLE_CARTS, "userId"),
       ensureTable(TABLE_OTP, "identifier"),
+      ensureTable(TABLE_VOUCHERS, "code"),
     ]);
 
     // Bật TTL cho bảng OTP
@@ -450,6 +453,231 @@ async function verifyAndConsumeOTP(identifier, inputCode, purpose = "REGISTRATIO
   }
 }
 
+/* ========================================================================= */
+/* 4. MODULE: QUẢN LÝ MÃ ƯU ĐÃI (AMAZON DYNAMODB VOUCHERS)                   */
+/* ========================================================================= */
+
+// Bộ nhớ đệm dự phòng (Fallback cache) để luôn đảm bảo tính sẵn sàng 100%
+const fallbackVouchersCache = new Map([
+  [
+    "VINSPORT10",
+    {
+      code: "VINSPORT10",
+      description: "Giảm 10% tổng đơn hàng (Tối đa 100.000đ)",
+      discountType: "PERCENT",
+      discountValue: 10,
+      maxDiscount: 100000,
+      minOrderAmount: 200000,
+      isActive: true,
+      createdAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: new Date().toISOString(),
+    },
+  ],
+  [
+    "LAMBDA50K",
+    {
+      code: "LAMBDA50K",
+      description: "Ưu đãi công nghệ AWS Lambda: Giảm thẳng 50.000đ",
+      discountType: "FIXED",
+      discountValue: 50000,
+      maxDiscount: 50000,
+      minOrderAmount: 300000,
+      isActive: true,
+      createdAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: new Date().toISOString(),
+    },
+  ],
+  [
+    "FREESHIP",
+    {
+      code: "FREESHIP",
+      description: "Miễn phí vận chuyển toàn quốc (Giảm 30.000đ phí ship)",
+      discountType: "SHIPPING",
+      discountValue: 30000,
+      maxDiscount: 30000,
+      minOrderAmount: 150000,
+      isActive: true,
+      createdAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: new Date().toISOString(),
+    },
+  ],
+  [
+    "VIPSPORT",
+    {
+      code: "VIPSPORT",
+      description: "Đặc quyền thành viên VIP: Giảm 15% cho đơn từ 500.000đ",
+      discountType: "PERCENT",
+      discountValue: 15,
+      maxDiscount: 200000,
+      minOrderAmount: 500000,
+      isActive: true,
+      createdAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: new Date().toISOString(),
+    },
+  ],
+]);
+
+/**
+ * Lấy tất cả mã ưu đãi từ DynamoDB
+ */
+async function getAllVouchers() {
+  const client = getDocClient();
+  if (!client) {
+    return Array.from(fallbackVouchersCache.values());
+  }
+
+  try {
+    const response = await client.send(
+      new ScanCommand({
+        TableName: TABLE_VOUCHERS,
+      })
+    );
+
+    if (response.Items && response.Items.length > 0) {
+      // Cập nhật lại cache đồng thời
+      response.Items.forEach((item) => {
+        fallbackVouchersCache.set(item.code, item);
+      });
+      return response.Items.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+    }
+
+    // Nếu bảng DynamoDB chưa có dữ liệu, tự động seed danh sách mặc định
+    await seedDefaultVouchers();
+    return Array.from(fallbackVouchersCache.values());
+  } catch (err) {
+    console.warn("[DynamoDB Vouchers] Không thể đọc từ cloud DynamoDB, dùng fallback cache:", err.message);
+    return Array.from(fallbackVouchersCache.values());
+  }
+}
+
+/**
+ * Lấy chi tiết 1 mã ưu đãi theo Code
+ */
+async function getVoucherByCode(code) {
+  if (!code) return null;
+  const cleanCode = String(code).trim().toUpperCase();
+
+  const client = getDocClient();
+  if (client) {
+    try {
+      const response = await client.send(
+        new GetCommand({
+          TableName: TABLE_VOUCHERS,
+          Key: { code: cleanCode },
+        })
+      );
+
+      if (response.Item) {
+        fallbackVouchersCache.set(cleanCode, response.Item);
+        return response.Item;
+      }
+    } catch (err) {
+      console.warn("[DynamoDB Vouchers] Lỗi GetItem:", err.message);
+    }
+  }
+
+  // Fallback từ memory cache
+  return fallbackVouchersCache.get(cleanCode) || null;
+}
+
+/**
+ * Thêm hoặc Cập nhật mã ưu đãi trên DynamoDB
+ */
+async function saveVoucher(voucherData) {
+  if (!voucherData || !voucherData.code) {
+    throw new Error("Mã ưu đãi (code) là bắt buộc");
+  }
+
+  const cleanCode = String(voucherData.code).trim().toUpperCase();
+  const now = new Date().toISOString();
+
+  const existing = await getVoucherByCode(cleanCode);
+
+  const voucherItem = {
+    code: cleanCode,
+    description: String(voucherData.description || "").trim(),
+    discountType: String(voucherData.discountType || "PERCENT").toUpperCase(),
+    discountValue: Number(voucherData.discountValue) || 0,
+    maxDiscount: Number(voucherData.maxDiscount) || 0,
+    minOrderAmount: Number(voucherData.minOrderAmount) || 0,
+    isActive: voucherData.isActive !== false,
+    expiresAt: voucherData.expiresAt || null,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+  };
+
+  // Cập nhật fallback cache
+  fallbackVouchersCache.set(cleanCode, voucherItem);
+
+  const client = getDocClient();
+  if (client) {
+    try {
+      await client.send(
+        new PutCommand({
+          TableName: TABLE_VOUCHERS,
+          Item: voucherItem,
+        })
+      );
+      console.log(`[DynamoDB Vouchers] Đã lưu mã "${cleanCode}" lên DynamoDB thành công!`);
+    } catch (err) {
+      console.warn(`[DynamoDB Vouchers] Lưu lên DynamoDB lỗi (${err.message}), đã lưu vào bộ nhớ cục bộ.`);
+    }
+  }
+
+  return voucherItem;
+}
+
+/**
+ * Xóa mã ưu đãi khỏi DynamoDB
+ */
+async function deleteVoucher(code) {
+  if (!code) return false;
+  const cleanCode = String(code).trim().toUpperCase();
+
+  fallbackVouchersCache.delete(cleanCode);
+
+  const client = getDocClient();
+  if (client) {
+    try {
+      await client.send(
+        new DeleteCommand({
+          TableName: TABLE_VOUCHERS,
+          Key: { code: cleanCode },
+        })
+      );
+      console.log(`[DynamoDB Vouchers] Đã xóa mã "${cleanCode}" khỏi DynamoDB!`);
+      return true;
+    } catch (err) {
+      console.warn(`[DynamoDB Vouchers] Lỗi khi xóa trên DynamoDB: ${err.message}`);
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Tự động khởi tạo dữ liệu mẫu nếu bảng DynamoDB còn trống
+ */
+async function seedDefaultVouchers() {
+  const defaultList = Array.from(fallbackVouchersCache.values());
+  const client = getDocClient();
+  if (!client) return;
+
+  try {
+    for (const v of defaultList) {
+      await client.send(
+        new PutCommand({
+          TableName: TABLE_VOUCHERS,
+          Item: v,
+        })
+      );
+    }
+    console.log("[DynamoDB Vouchers] Đã nạp 4 mã ưu đãi khởi tạo vào DynamoDB.");
+  } catch (err) {
+    console.warn("[DynamoDB Vouchers] Seed DynamoDB lỗi:", err.message);
+  }
+}
+
 module.exports = {
   ensureAllDynamoTables,
   // 1. Recently viewed
@@ -463,8 +691,15 @@ module.exports = {
   // 3. OTP lifecycle
   generateAndSaveOTP,
   verifyAndConsumeOTP,
+  // 4. Vouchers Management
+  getAllVouchers,
+  getVoucherByCode,
+  saveVoucher,
+  deleteVoucher,
+  seedDefaultVouchers,
   // Table names
   TABLE_RECENTLY_VIEWED,
   TABLE_CARTS,
   TABLE_OTP,
+  TABLE_VOUCHERS,
 };

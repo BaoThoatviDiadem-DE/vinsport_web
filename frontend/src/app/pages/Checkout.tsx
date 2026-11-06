@@ -31,10 +31,25 @@ export const Checkout = () => {
   const [orderId, setOrderId] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
+  const [appliedPromo, setAppliedPromo] = useState<any>(null);
+
   const [paymentSnapshot, setPaymentSnapshot] = useState<{
     amount: number;
     transferContent: string;
   } | null>(null);
+
+  useEffect(() => {
+    try {
+      const savedPromo = localStorage.getItem("vinsport_lambda_promo");
+      if (savedPromo) {
+        setAppliedPromo(JSON.parse(savedPromo));
+      }
+    } catch (_) {}
+  }, []);
+
+  const payableAmount = useMemo(() => {
+    return appliedPromo?.finalAmount ? Number(appliedPromo.finalAmount) : totalPrice;
+  }, [appliedPromo, totalPrice]);
 
   const [formData, setFormData] = useState({
     fullName: "",
@@ -68,19 +83,19 @@ export const Checkout = () => {
   }, [paymentSnapshot, previewOrderCode]);
 
   const qrUrl = useMemo(() => {
-    const amount = Math.round(paymentSnapshot?.amount ?? totalPrice ?? 0);
+    const amount = Math.round(paymentSnapshot?.amount ?? payableAmount ?? 0);
     const encodedAccountName = encodeURIComponent(BANK_INFO.accountName);
     const encodedNote = encodeURIComponent(transferContent);
 
     return `https://img.vietqr.io/image/${BANK_INFO.bankCode}-${BANK_INFO.accountNumber}-compact2.png?amount=${amount}&addInfo=${encodedNote}&accountName=${encodedAccountName}`;
-  }, [paymentSnapshot, totalPrice, transferContent]);
+  }, [paymentSnapshot, payableAmount, transferContent]);
 
-  const successAmount = paymentSnapshot?.amount ?? totalPrice;
+  const successAmount = paymentSnapshot?.amount ?? payableAmount;
   const successTransferContent =
     paymentSnapshot?.transferContent ?? transferContent;
 
   const successQrUrl = useMemo(() => {
-    const amount = Math.round(paymentSnapshot?.amount ?? totalPrice ?? 0);
+    const amount = Math.round(paymentSnapshot?.amount ?? payableAmount ?? 0);
     const encodedAccountName = encodeURIComponent(BANK_INFO.accountName);
     const encodedNote = encodeURIComponent(successTransferContent);
 
@@ -116,7 +131,7 @@ export const Checkout = () => {
     setIsProcessing(true);
 
     const snapshot = {
-      amount: totalPrice,
+      amount: payableAmount,
       transferContent,
     };
     setPaymentSnapshot(snapshot);
@@ -145,9 +160,11 @@ export const Checkout = () => {
           price: matched?.price ?? item.product.price,
         };
       }),
-      totalAmount: totalPrice,
+      totalAmount: payableAmount,
       paymentMethod: formData.paymentMethod,
       orderDate: new Date().toISOString(),
+      voucherCode: appliedPromo?.appliedVoucher?.code || null,
+      serverlessDiscount: appliedPromo?.totalDiscount || 0,
     };
 
     try {
@@ -162,6 +179,7 @@ export const Checkout = () => {
       );
       setIsSuccess(true);
       clearCart();
+      localStorage.removeItem("vinsport_lambda_promo");
     } catch (error: any) {
       console.error("Lỗi tạo đơn hàng:", error);
 
@@ -568,10 +586,20 @@ export const Checkout = () => {
                 <span>Tạm tính</span>
                 <span className="font-medium">{formatPrice(totalPrice)}</span>
               </div>
+
+              {appliedPromo && appliedPromo.totalDiscount > 0 && (
+                <div className="flex justify-between text-emerald-600 text-sm font-medium">
+                  <span>
+                    Giảm giá {appliedPromo.appliedVoucher?.code ? `(${appliedPromo.appliedVoucher.code})` : ""}
+                  </span>
+                  <span>-{formatPrice(appliedPromo.totalDiscount)}</span>
+                </div>
+              )}
+
               <div className="flex justify-between items-center border-t border-slate-100 pt-3 mt-3">
                 <span className="font-bold text-slate-900">Tổng cộng</span>
                 <span className="font-black text-2xl text-orange-600">
-                  {formatPrice(totalPrice)}
+                  {formatPrice(payableAmount)}
                 </span>
               </div>
             </div>

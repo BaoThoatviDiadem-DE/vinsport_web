@@ -15,7 +15,7 @@ export const Footer = () => {
             VinSport là hệ thống cửa hàng bán lẻ đồ thể thao uy tín hàng đầu, cung cấp các sản phẩm chính hãng từ Nike, Adidas, Puma...
           </p>
           <div className="flex gap-4">
-           <a href="https://www.facebook.com/cun0108" target="_blank" rel="noopener noreferrer"><Facebook className="w-5 h-5" /></a>
+            <a href="https://www.facebook.com/cun0108" target="_blank" rel="noopener noreferrer"><Facebook className="w-5 h-5" /></a>
             <a href="https://www.instagram.com/ngdng_1402/" target="_blank" rel="noopener noreferrer"><Instagram className="w-5 h-5" /></a>
           </div>
         </div>
@@ -40,7 +40,7 @@ export const Footer = () => {
         </div>
       </div>
       <div className="container mx-auto px-4 mt-12 pt-8 border-t border-slate-800 text-sm text-center text-slate-500">
-        &copy; {new Date().getFullYear()} VinSport. Tất cả các quyền được bảo lưu.
+        &copy; {new Date().getFullYear()} VinSport.
       </div>
     </footer>
   );

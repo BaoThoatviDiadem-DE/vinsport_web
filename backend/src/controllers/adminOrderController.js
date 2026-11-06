@@ -327,9 +327,57 @@ const updateAdminPaymentStatus = async (req, res) => {
   }
 };
 
+const deleteAdminOrder = async (req, res) => {
+  try {
+    const orderId = Number(req.params.id);
+    if (!orderId) {
+      return res.status(400).json({ message: "ID đơn hàng không hợp lệ" });
+    }
+
+    const pool = await poolPromise;
+    await pool.request().input("oid", sql.Int, orderId).query(`
+      DELETE FROM Payments WHERE order_id = @oid;
+      DELETE FROM OrderDetails WHERE order_id = @oid;
+      DELETE FROM Orders WHERE order_id = @oid;
+    `);
+
+    return res.json({ success: true, message: "Đã xóa đơn hàng thành công" });
+  } catch (error) {
+    console.error("DELETE ADMIN ORDER ERROR:", error);
+    return res.status(500).json({ message: error.message || "Không thể xóa đơn hàng" });
+  }
+};
+
+const deleteAdminOrdersBatch = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: "Danh sách đơn hàng cần xóa không hợp lệ" });
+    }
+
+    const pool = await poolPromise;
+    const cleanIds = ids.map(Number).filter((id) => !isNaN(id) && id > 0);
+
+    for (const oid of cleanIds) {
+      await pool.request().input("oid", sql.Int, oid).query(`
+        DELETE FROM Payments WHERE order_id = @oid;
+        DELETE FROM OrderDetails WHERE order_id = @oid;
+        DELETE FROM Orders WHERE order_id = @oid;
+      `);
+    }
+
+    return res.json({ success: true, message: `Đã xóa thành công ${cleanIds.length} đơn hàng!` });
+  } catch (error) {
+    console.error("BATCH DELETE ADMIN ORDERS ERROR:", error);
+    return res.status(500).json({ message: error.message || "Không thể xóa danh sách đơn hàng" });
+  }
+};
+
 module.exports = {
   getAdminOrders,
   updateAdminOrder,
   updateAdminOrderStatus,
   updateAdminPaymentStatus,
+  deleteAdminOrder,
+  deleteAdminOrdersBatch,
 };

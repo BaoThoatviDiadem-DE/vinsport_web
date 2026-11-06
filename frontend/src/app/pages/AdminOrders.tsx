@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Filter, RefreshCw, ChevronDown, Loader2, Edit3, Check } from "lucide-react";
+import { Search, Filter, RefreshCw, ChevronDown, Loader2, Edit3, Check, RotateCcw, CheckSquare, Trash2 } from "lucide-react";
+import toast from "react-hot-toast";
 import api from "../api/api";
 
 type PaymentMethod = "cod" | "banking" | "momo" | string;
@@ -125,12 +126,17 @@ export default function AdminOrders() {
   const [originalOrders, setOriginalOrders] = useState<AdminOrder[]>([]);
   const [idSearch, setIdSearch] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
-  const [paymentMethodSearch, setPaymentMethodSearch] = useState("");
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState("all");
+
+  // Chế độ Chọn & Xóa hàng loạt
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number | string>>(new Set());
+  const [isDeletingBatch, setIsDeletingBatch] = useState(false);
+  const [showBatchDeleteModal, setShowBatchDeleteModal] = useState(false);
 
   // State tạm thời khi đang nhập trong popup (chỉ áp dụng khi bấm Đồng ý hoặc Enter)
   const [tempIdSearch, setTempIdSearch] = useState("");
   const [tempCustomerSearch, setTempCustomerSearch] = useState("");
-  const [tempPaymentMethodSearch, setTempPaymentMethodSearch] = useState("");
 
   const handleApplyIdSearch = () => {
     setIdSearch(tempIdSearch.trim());
@@ -142,27 +148,19 @@ export default function AdminOrders() {
     setCustomerSearchOpen(false);
   };
 
-  const handleApplyPaymentMethodSearch = () => {
-    setPaymentMethodSearch(tempPaymentMethodSearch.trim());
-    setPaymentMethodSearchOpen(false);
-  };
-
   const [idSearchOpen, setIdSearchOpen] = useState(false);
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
-  const [paymentMethodSearchOpen, setPaymentMethodSearchOpen] = useState(false);
+  const [paymentMethodFilterOpen, setPaymentMethodFilterOpen] = useState(false);
 
   const idSearchRef = useRef<HTMLDivElement>(null);
   const customerSearchRef = useRef<HTMLDivElement>(null);
-  const paymentMethodSearchRef = useRef<HTMLDivElement>(null);
+  const paymentMethodFilterRef = useRef<HTMLDivElement>(null);
 
-  const [paymentStatusFilters, setPaymentStatusFilters] = useState<string[]>([]);
-  const [orderStatusFilters, setOrderStatusFilters] = useState<string[]>([]);
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
+  const [orderStatusFilter, setOrderStatusFilter] = useState("all");
 
   const [paymentFilterOpen, setPaymentFilterOpen] = useState(false);
   const [orderFilterOpen, setOrderFilterOpen] = useState(false);
-
-  const [paymentFilterKeyword, setPaymentFilterKeyword] = useState("");
-  const [orderFilterKeyword, setOrderFilterKeyword] = useState("");
 
   const [savingId, setSavingId] = useState<number | string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -174,7 +172,7 @@ export default function AdminOrders() {
   const closeOtherPopovers = (except?: string) => {
     if (except !== "id") setIdSearchOpen(false);
     if (except !== "customer") setCustomerSearchOpen(false);
-    if (except !== "paymentMethod") setPaymentMethodSearchOpen(false);
+    if (except !== "paymentMethod") setPaymentMethodFilterOpen(false);
     if (except !== "paymentStatus") setPaymentFilterOpen(false);
     if (except !== "orderStatus") setOrderFilterOpen(false);
   };
@@ -189,8 +187,8 @@ export default function AdminOrders() {
       if (customerSearchRef.current && !customerSearchRef.current.contains(target)) {
         setCustomerSearchOpen(false);
       }
-      if (paymentMethodSearchRef.current && !paymentMethodSearchRef.current.contains(target)) {
-        setPaymentMethodSearchOpen(false);
+      if (paymentMethodFilterRef.current && !paymentMethodFilterRef.current.contains(target)) {
+        setPaymentMethodFilterOpen(false);
       }
       if (paymentFilterRef.current && !paymentFilterRef.current.contains(target)) {
         setPaymentFilterOpen(false);
@@ -225,18 +223,6 @@ export default function AdminOrders() {
     loadOrders();
   }, []);
 
-  const filteredPaymentOptions = useMemo(() => {
-    const qRaw = paymentFilterKeyword.trim().toLowerCase();
-    const qClean = removeVietnameseTones(qRaw);
-    if (!qRaw) return PAYMENT_STATUS_OPTIONS;
-    return PAYMENT_STATUS_OPTIONS.filter((item) => {
-      const labelRaw = item.label.toLowerCase();
-      const labelClean = removeVietnameseTones(labelRaw);
-      const val = item.value.toLowerCase();
-      return labelRaw.includes(qRaw) || labelClean.includes(qClean) || val.includes(qRaw);
-    });
-  }, [paymentFilterKeyword]);
-
   const shippingOrdersCount = useMemo(
     () => orders.filter((o) => o.orderStatus?.toLowerCase() === "shipping").length,
     [orders]
@@ -250,60 +236,35 @@ export default function AdminOrders() {
     [orders]
   );
 
-  const filteredOrderOptions = useMemo(() => {
-    const qRaw = orderFilterKeyword.trim().toLowerCase();
-    const qClean = removeVietnameseTones(qRaw);
-    if (!qRaw) return ORDER_STATUS_OPTIONS;
-    return ORDER_STATUS_OPTIONS.filter((item) => {
-      const labelRaw = item.label.toLowerCase();
-      const labelClean = removeVietnameseTones(labelRaw);
-      const val = item.value.toLowerCase();
-      return labelRaw.includes(qRaw) || labelClean.includes(qClean) || val.includes(qRaw);
-    });
-  }, [orderFilterKeyword]);
-
-  const togglePaymentStatusFilter = (value: string) => {
-    setPaymentStatusFilters((prev) =>
-      prev.includes(value)
-        ? prev.filter((item) => item !== value)
-        : [...prev, value]
-    );
-  };
-
-  const toggleOrderStatusFilter = (value: string) => {
-    setOrderStatusFilters((prev) =>
-      prev.includes(value)
-        ? prev.filter((item) => item !== value)
-        : [...prev, value]
-    );
-  };
-
   const clearAllFilters = () => {
     setIdSearch("");
     setCustomerSearch("");
-    setPaymentMethodSearch("");
-    setPaymentStatusFilters([]);
-    setOrderStatusFilters([]);
-    setPaymentFilterKeyword("");
-    setOrderFilterKeyword("");
+    setPaymentMethodFilter("all");
+    setPaymentStatusFilter("all");
+    setOrderStatusFilter("all");
 
     setTempIdSearch("");
     setTempCustomerSearch("");
-    setTempPaymentMethodSearch("");
 
     setIdSearchOpen(false);
     setCustomerSearchOpen(false);
-    setPaymentMethodSearchOpen(false);
+    setPaymentMethodFilterOpen(false);
     setPaymentFilterOpen(false);
     setOrderFilterOpen(false);
+
+    if (hasActiveFilters) {
+      toast.success("Đã xóa tất cả bộ lọc");
+    } else {
+      toast("Không có bộ lọc nào đang áp dụng", { icon: "ℹ️" });
+    }
   };
 
   const hasActiveFilters =
     Boolean(idSearch.trim()) ||
     Boolean(customerSearch.trim()) ||
-    Boolean(paymentMethodSearch.trim()) ||
-    paymentStatusFilters.length > 0 ||
-    orderStatusFilters.length > 0;
+    paymentMethodFilter !== "all" ||
+    paymentStatusFilter !== "all" ||
+    orderStatusFilter !== "all";
 
   const filteredOrders = useMemo(() => {
     const idQ = idSearch.trim().toLowerCase().replace(/^#/, "");
@@ -311,16 +272,12 @@ export default function AdminOrders() {
     const custQClean = removeVietnameseTones(custQRaw);
     const custQDigits = custQRaw.replace(/\D/g, "");
 
-    const methodQRaw = paymentMethodSearch.trim().toLowerCase();
-    const methodQClean = removeVietnameseTones(methodQRaw);
-
     return orders.filter((order) => {
       const orderId = String(order.id).toLowerCase();
       const customerName = String(order.customerName ?? "");
       const phone = String(order.phone ?? "");
       const address = String(order.address ?? "");
-      const paymentMethod = String(order.paymentMethod ?? "");
-      const paymentMethodVi = formatPaymentMethod(order.paymentMethod);
+      const paymentMethod = String(order.paymentMethod ?? "").toLowerCase();
 
       const matchesId = !idQ || orderId.includes(idQ);
 
@@ -340,25 +297,17 @@ export default function AdminOrders() {
         addressRaw.includes(custQRaw) ||
         addressClean.includes(custQClean);
 
-      const methodRaw = paymentMethod.toLowerCase();
-      const methodViRaw = paymentMethodVi.toLowerCase();
-      const methodClean = removeVietnameseTones(paymentMethod);
-      const methodViClean = removeVietnameseTones(paymentMethodVi);
-
       const matchesMethod =
-        !methodQRaw ||
-        methodRaw.includes(methodQRaw) ||
-        methodViRaw.includes(methodQRaw) ||
-        methodClean.includes(methodQClean) ||
-        methodViClean.includes(methodQClean);
+        paymentMethodFilter === "all" ||
+        paymentMethod === paymentMethodFilter.toLowerCase();
 
       const matchesPaymentStatus =
-        paymentStatusFilters.length === 0 ||
-        paymentStatusFilters.includes(order.paymentStatus);
+        paymentStatusFilter === "all" ||
+        order.paymentStatus === paymentStatusFilter;
 
       const matchesOrderStatus =
-        orderStatusFilters.length === 0 ||
-        orderStatusFilters.includes(order.orderStatus);
+        orderStatusFilter === "all" ||
+        order.orderStatus === orderStatusFilter;
 
       return (
         matchesId &&
@@ -372,9 +321,9 @@ export default function AdminOrders() {
     orders,
     idSearch,
     customerSearch,
-    paymentMethodSearch,
-    paymentStatusFilters,
-    orderStatusFilters,
+    paymentMethodFilter,
+    paymentStatusFilter,
+    orderStatusFilter,
   ]);
 
   const handleFieldChange = (
@@ -384,9 +333,29 @@ export default function AdminOrders() {
   ) => {
     setOrders((prev) =>
       prev.map((order) =>
-        order.id === id ? { ...order, [field]: value } : order
+        String(order.id) === String(id) ? { ...order, [field]: value } : order
       )
     );
+  };
+
+  const handleLocalStatusChange = (
+    id: number | string,
+    field: "paymentStatus" | "orderStatus",
+    value: string
+  ) => {
+    handleFieldChange(id, field, value);
+  };
+
+  const handleTableKeyDown = (e: React.KeyboardEvent<any>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (!isUpdating) {
+        handleSaveAllOrders();
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      handleCancelEdit();
+    }
   };
 
   const handleStatusChange = async (
@@ -395,11 +364,11 @@ export default function AdminOrders() {
     newValue: string
   ) => {
     const prevOrders = [...orders];
-    const targetOrder = orders.find((o) => o.id === orderId);
+    const targetOrder = orders.find((o) => String(o.id) === String(orderId));
 
     setOrders((prev) =>
       prev.map((order) =>
-        order.id === orderId ? { ...order, [field]: newValue } : order
+        String(order.id) === String(orderId) ? { ...order, [field]: newValue } : order
       )
     );
 
@@ -416,9 +385,10 @@ export default function AdminOrders() {
           status: newValue,
         });
       }
+      toast.success(`Đã cập nhật ${field === "paymentStatus" ? "TT thanh toán" : "TT đơn hàng"}`);
     } catch (error: any) {
       console.error(`Lỗi cập nhật ${field}:`, error);
-      alert(
+      toast.error(
         error?.response?.data?.message ||
         "Không cập nhật được trạng thái. Đang hoàn tác lại..."
       );
@@ -443,7 +413,7 @@ export default function AdminOrders() {
       setIsUpdating(true);
 
       const modifiedOrders = orders.filter((o) => {
-        const orig = originalOrders.find((origO) => origO.id === o.id);
+        const orig = originalOrders.find((origO) => String(origO.id) === String(o.id));
         if (!orig) return false;
         return (
           o.paymentStatus !== orig.paymentStatus ||
@@ -452,7 +422,7 @@ export default function AdminOrders() {
       });
 
       if (modifiedOrders.length === 0) {
-        alert("Không có thay đổi nào để cập nhật.");
+        toast("Không có thay đổi nào để cập nhật.", { icon: "ℹ️" });
         setIsEditingTable(false);
         return;
       }
@@ -468,14 +438,43 @@ export default function AdminOrders() {
         )
       );
 
-      alert(`Cập nhật thành công ${modifiedOrders.length} đơn hàng vào cơ sở dữ liệu!`);
+      toast.success(`Cập nhật thành công ${modifiedOrders.length} đơn hàng!`);
       setIsEditingTable(false);
       await loadOrders();
     } catch (error: any) {
       console.error("Lỗi cập nhật đơn hàng:", error);
-      alert(error?.response?.data?.message || "Không cập nhật được đơn hàng.");
+      toast.error(error?.response?.data?.message || "Không cập nhật được đơn hàng.");
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const toggleSelectId = (id: number | string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setIsDeletingBatch(true);
+    try {
+      const idsArray = Array.from(selectedIds);
+      await api.post("/admin/orders/batch-delete", { ids: idsArray });
+      toast.success(`Đã xóa thành công ${idsArray.length} đơn hàng!`);
+      setOrders((prev) => prev.filter((o) => !selectedIds.has(o.id)));
+      setOriginalOrders((prev) => prev.filter((o) => !selectedIds.has(o.id)));
+      setSelectedIds(new Set());
+      setIsSelecting(false);
+      setShowBatchDeleteModal(false);
+    } catch (err: any) {
+      console.error("Lỗi xóa hàng loạt đơn hàng:", err);
+      toast.error(err?.response?.data?.message || "Không thể xóa các đơn hàng đã chọn");
+    } finally {
+      setIsDeletingBatch(false);
     }
   };
 
@@ -491,34 +490,93 @@ export default function AdminOrders() {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-5 md:p-6">
-        <div className="flex items-center justify-between gap-3 mb-4">
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-6 rounded-full bg-orange-500" />
-            <h2 className="text-xl font-bold text-slate-900">Danh sách đơn hàng</h2>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-6 rounded-full bg-orange-500" />
+              <h2 className="text-xl font-bold text-slate-900">Danh sách đơn hàng</h2>
+            </div>
+
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                hasActiveFilters
+                  ? "text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 border-orange-200 shadow-sm active:scale-95"
+                  : "text-slate-400 hover:text-slate-600 bg-slate-50 hover:bg-slate-100 border-slate-200"
+              }`}
+              title="Xóa tất cả bộ lọc tìm kiếm"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Xóa lọc</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-2.5">
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={clearAllFilters}
-                className="text-xs font-semibold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200/60 px-3.5 py-2 rounded-xl transition-colors cursor-pointer"
-              >
-                Xóa tất cả lọc
-              </button>
-            )}
-
             {!isEditingTable ? (
-              <button
-                type="button"
-                onClick={handleStartEdit}
-                disabled={isLoading}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
-                title="Bấm để chỉnh sửa trạng thái đơn hàng"
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-                <span>Chỉnh sửa</span>
-              </button>
+              <>
+                {!isSelecting ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleStartEdit}
+                      disabled={isLoading}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
+                      title="Bấm để chỉnh sửa trạng thái đơn hàng"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Chỉnh sửa</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsSelecting(true);
+                        setSelectedIds(new Set());
+                      }}
+                      disabled={isLoading || orders.length === 0}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
+                      title="Bấm để chọn bản ghi cần xóa"
+                    >
+                      <CheckSquare className="w-3.5 h-3.5" />
+                      <span>Chọn</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsSelecting(false);
+                        setSelectedIds(new Set());
+                      }}
+                      className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold transition-all cursor-pointer"
+                    >
+                      Hủy
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedIds.size === 0) {
+                          toast.error("Vui lòng chọn ít nhất một đơn hàng để xóa!");
+                          return;
+                        }
+                        setShowBatchDeleteModal(true);
+                      }}
+                      className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-white font-bold text-xs shadow-sm active:scale-95 transition-all cursor-pointer ${
+                        selectedIds.size > 0
+                          ? "bg-red-600 hover:bg-red-700"
+                          : "bg-red-500/80 hover:bg-red-600"
+                      }`}
+                      title="Xóa các đơn hàng đã chọn"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Xóa{selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}</span>
+                    </button>
+                  </>
+                )}
+              </>
             ) : (
               <>
                 <button
@@ -574,6 +632,43 @@ export default function AdminOrders() {
             <table className="w-full min-w-[1240px] border-collapse">
               <thead>
                 <tr className="bg-slate-100 text-left">
+                  {/* Ô chọn hàng loạt khi bật chế độ Chọn */}
+                  {isSelecting && (
+                    <th
+                      className="p-3 border-b w-12 text-center cursor-pointer select-none"
+                      onClick={() => {
+                        const allSelected =
+                          filteredOrders.length > 0 &&
+                          filteredOrders.every((o) => selectedIds.has(o.id));
+                        if (allSelected) {
+                          setSelectedIds(new Set());
+                        } else {
+                          setSelectedIds(new Set(filteredOrders.map((o) => o.id)));
+                        }
+                      }}
+                      title="Chọn tất cả bản ghi"
+                    >
+                      <div className="flex items-center justify-center">
+                        <input
+                          type="checkbox"
+                          checked={
+                            filteredOrders.length > 0 &&
+                            filteredOrders.every((o) => selectedIds.has(o.id))
+                          }
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedIds(new Set(filteredOrders.map((o) => o.id)));
+                            } else {
+                              setSelectedIds(new Set());
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer accent-orange-600"
+                        />
+                      </div>
+                    </th>
+                  )}
+
                   <th className="p-3 border-b min-w-[130px] relative">
                     <div ref={idSearchRef} className="relative inline-block text-left">
                       <button
@@ -715,232 +810,187 @@ export default function AdminOrders() {
                   <th className="p-3 border-b min-w-[140px] font-semibold text-sm text-slate-800">Tổng tiền</th>
 
                   <th className="p-3 border-b min-w-[170px] relative">
-                    <div ref={paymentMethodSearchRef} className="relative inline-block text-left">
+                    <div ref={paymentMethodFilterRef} className="relative inline-block text-left">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (!paymentMethodSearchOpen) setTempPaymentMethodSearch(paymentMethodSearch);
-                          setPaymentMethodSearchOpen((prev) => !prev);
+                          setPaymentMethodFilterOpen((prev) => !prev);
                           closeOtherPopovers("paymentMethod");
                         }}
-                        className={`flex items-center gap-1.5 font-semibold text-sm transition-colors py-1 px-2.5 -ml-2 rounded-lg hover:bg-slate-200/80 cursor-pointer ${paymentMethodSearch ? "text-orange-600 bg-orange-50/80" : "text-slate-800"
-                          }`}
-                        title="Bấm để tìm kiếm phương thức thanh toán"
+                        className={`flex items-center gap-1.5 font-semibold text-sm transition-colors py-1 px-2.5 -ml-2 rounded-lg hover:bg-slate-200/80 cursor-pointer ${
+                          paymentMethodFilter !== "all" ? "text-orange-600 bg-orange-50/80" : "text-slate-800"
+                        }`}
+                        title="Bấm để lọc theo phương thức thanh toán"
                       >
-                        <Search
-                          className={`w-3.5 h-3.5 ${paymentMethodSearch ? "text-orange-600" : "text-slate-400 group-hover:text-slate-600"
-                            }`}
-                        />
                         <span>Phương thức</span>
-                        {paymentMethodSearch && (
+                        <Filter
+                          className={`w-3.5 h-3.5 transition-colors ${
+                            paymentMethodFilter !== "all"
+                              ? "text-orange-600 fill-orange-500"
+                              : "text-slate-400 group-hover:text-slate-600"
+                          }`}
+                        />
+                        {paymentMethodFilter !== "all" && (
                           <span className="w-2 h-2 rounded-full bg-orange-600" />
                         )}
                       </button>
 
-                      {paymentMethodSearchOpen && (
+                      {paymentMethodFilterOpen && (
                         <div
                           onClick={(e) => e.stopPropagation()}
-                          className="absolute left-0 top-full mt-2 z-40 w-[240px] bg-white border border-slate-200 rounded-xl shadow-xl p-3 font-normal text-slate-800"
+                          className="absolute left-0 top-full mt-2 z-40 w-[220px] bg-white border border-slate-200 rounded-xl shadow-xl p-3 font-normal text-slate-800"
                         >
-                          <div className="text-xs font-bold text-slate-700 mb-2">Tìm kiếm Phương thức</div>
-                          <input
-                            autoFocus
-                            type="text"
-                            value={tempPaymentMethodSearch}
-                            onChange={(e) => setTempPaymentMethodSearch(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                e.preventDefault();
-                                handleApplyPaymentMethodSearch();
-                              }
-                            }}
-                            placeholder="Nhập COD hoặc Chuyển khoản..."
-                            className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white mb-2"
-                          />
-                          <div className="flex items-center justify-between text-xs pt-1 border-t">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setTempPaymentMethodSearch("");
-                                setPaymentMethodSearch("");
-                                setPaymentMethodSearchOpen(false);
-                              }}
-                              className="text-slate-500 hover:text-slate-800 font-medium cursor-pointer"
-                            >
-                              Xóa
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleApplyPaymentMethodSearch}
-                              className="px-3 py-1 rounded bg-orange-500 text-white hover:bg-orange-600 font-medium cursor-pointer"
-                            >
-                              Đồng ý
-                            </button>
+                          <div className="text-xs font-bold text-slate-700 mb-2">Lọc theo phương thức</div>
+                          <div className="space-y-1.5">
+                            {[
+                              { value: "all", label: "Tất cả phương thức" },
+                              { value: "cod", label: "Tiền mặt (COD)" },
+                              { value: "banking", label: "Chuyển khoản ngân hàng" },
+                              { value: "momo", label: "Ví điện tử MoMo" },
+                            ].map((opt) => (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => {
+                                  setPaymentMethodFilter(opt.value);
+                                  setPaymentMethodFilterOpen(false);
+                                }}
+                                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+                                  paymentMethodFilter === opt.value
+                                    ? "bg-orange-50 text-orange-600 font-bold"
+                                    : "text-slate-600 hover:bg-slate-50"
+                                }`}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
                           </div>
                         </div>
                       )}
                     </div>
                   </th>
 
-                  <th className="p-3 border-b min-w-[210px] relative">
+                  <th className="p-3 border-b min-w-[170px] relative">
                     <div ref={paymentFilterRef} className="relative inline-block text-left">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           setPaymentFilterOpen((prev) => !prev);
-                          setOrderFilterOpen(false);
+                          closeOtherPopovers("paymentStatus");
                         }}
-                        className={`flex items-center gap-1.5 font-semibold text-sm transition-colors py-1 px-2.5 -ml-2 rounded-lg hover:bg-slate-200/80 cursor-pointer ${paymentStatusFilters.length > 0 ? "text-orange-600 bg-orange-50/80" : "text-slate-800"
-                          }`}
+                        className={`flex items-center gap-1.5 font-semibold text-sm transition-colors py-1 px-2.5 -ml-2 rounded-lg hover:bg-slate-200/80 cursor-pointer ${
+                          paymentStatusFilter !== "all" ? "text-orange-600 bg-orange-50/80" : "text-slate-800"
+                        }`}
                         title="Bấm để lọc theo trạng thái thanh toán"
                       >
                         <span>TT thanh toán</span>
                         <Filter
-                          className={`w-3.5 h-3.5 transition-colors ${paymentStatusFilters.length > 0
-                            ? "text-orange-600 fill-orange-500"
-                            : "text-slate-400 group-hover:text-slate-600"
-                            }`}
+                          className={`w-3.5 h-3.5 transition-colors ${
+                            paymentStatusFilter !== "all"
+                              ? "text-orange-600 fill-orange-500"
+                              : "text-slate-400 group-hover:text-slate-600"
+                          }`}
                         />
-                        {paymentStatusFilters.length > 0 && (
-                          <span className="w-4 h-4 rounded-full bg-orange-600 text-white text-[10px] flex items-center justify-center font-bold">
-                            {paymentStatusFilters.length}
-                          </span>
+                        {paymentStatusFilter !== "all" && (
+                          <span className="w-2 h-2 rounded-full bg-orange-600" />
                         )}
                       </button>
 
                       {paymentFilterOpen && (
                         <div
                           onClick={(e) => e.stopPropagation()}
-                          className="absolute left-0 top-full mt-2 z-40 w-[270px] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden font-normal text-slate-800"
+                          className="absolute left-0 top-full mt-2 z-40 w-[200px] bg-white border border-slate-200 rounded-xl shadow-xl p-3 font-normal text-slate-800"
                         >
-                          <div className="p-2.5 border-b bg-slate-50">
-                            <div className="relative">
-                              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                              <input
-                                value={paymentFilterKeyword}
-                                onChange={(e) => setPaymentFilterKeyword(e.target.value)}
-                                placeholder="Tìm kiếm trạng thái..."
-                                className="w-full border rounded-lg pl-8 pr-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="max-h-[190px] overflow-y-auto py-1.5">
-                            {filteredPaymentOptions.map((item) => (
-                              <label
-                                key={item.value}
-                                className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-slate-50 cursor-pointer text-xs"
+                          <div className="text-xs font-bold text-slate-700 mb-2">Lọc TT thanh toán</div>
+                          <div className="space-y-1.5">
+                            {[
+                              { value: "all", label: "Tất cả trạng thái" },
+                              { value: "pending", label: "Chờ xác nhận" },
+                              { value: "paid", label: "Đã thanh toán" },
+                              { value: "failed", label: "Thất bại" },
+                            ].map((opt) => (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => {
+                                  setPaymentStatusFilter(opt.value);
+                                  setPaymentFilterOpen(false);
+                                }}
+                                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+                                  paymentStatusFilter === opt.value
+                                    ? "bg-orange-50 text-orange-600 font-bold"
+                                    : "text-slate-600 hover:bg-slate-50"
+                                }`}
                               >
-                                <input
-                                  type="checkbox"
-                                  checked={paymentStatusFilters.includes(item.value)}
-                                  onChange={() => togglePaymentStatusFilter(item.value)}
-                                  className="w-3.5 h-3.5 rounded text-orange-600 focus:ring-orange-500 cursor-pointer"
-                                />
-                                <span className="font-medium text-slate-700">{item.label}</span>
-                              </label>
+                                {opt.label}
+                              </button>
                             ))}
-                          </div>
-
-                          <div className="border-t px-3 py-2 flex items-center justify-between bg-slate-50 text-xs">
-                            <button
-                              type="button"
-                              onClick={() => setPaymentStatusFilters([])}
-                              className="text-slate-500 hover:text-slate-800 font-medium"
-                            >
-                              Xóa
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setPaymentFilterOpen(false)}
-                              className="px-3 py-1 rounded bg-orange-500 text-white hover:bg-orange-600 font-medium cursor-pointer"
-                            >
-                              Đồng ý
-                            </button>
                           </div>
                         </div>
                       )}
                     </div>
                   </th>
 
-                  <th className="p-3 border-b min-w-[210px] relative">
+                  <th className="p-3 border-b min-w-[170px] relative">
                     <div ref={orderFilterRef} className="relative inline-block text-left">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           setOrderFilterOpen((prev) => !prev);
-                          setPaymentFilterOpen(false);
+                          closeOtherPopovers("orderStatus");
                         }}
-                        className={`flex items-center gap-1.5 font-semibold text-sm transition-colors py-1 px-2.5 -ml-2 rounded-lg hover:bg-slate-200/80 cursor-pointer ${orderStatusFilters.length > 0 ? "text-orange-600 bg-orange-50/80" : "text-slate-800"
-                          }`}
+                        className={`flex items-center gap-1.5 font-semibold text-sm transition-colors py-1 px-2.5 -ml-2 rounded-lg hover:bg-slate-200/80 cursor-pointer ${
+                          orderStatusFilter !== "all" ? "text-orange-600 bg-orange-50/80" : "text-slate-800"
+                        }`}
                         title="Bấm để lọc theo trạng thái đơn hàng"
                       >
                         <span>TT đơn hàng</span>
                         <Filter
-                          className={`w-3.5 h-3.5 transition-colors ${orderStatusFilters.length > 0
-                            ? "text-orange-600 fill-orange-500"
-                            : "text-slate-400 group-hover:text-slate-600"
-                            }`}
+                          className={`w-3.5 h-3.5 transition-colors ${
+                            orderStatusFilter !== "all"
+                              ? "text-orange-600 fill-orange-500"
+                              : "text-slate-400 group-hover:text-slate-600"
+                          }`}
                         />
-                        {orderStatusFilters.length > 0 && (
-                          <span className="w-4 h-4 rounded-full bg-orange-600 text-white text-[10px] flex items-center justify-center font-bold">
-                            {orderStatusFilters.length}
-                          </span>
+                        {orderStatusFilter !== "all" && (
+                          <span className="w-2 h-2 rounded-full bg-orange-600" />
                         )}
                       </button>
 
                       {orderFilterOpen && (
                         <div
                           onClick={(e) => e.stopPropagation()}
-                          className="absolute left-0 top-full mt-2 z-40 w-[270px] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden font-normal text-slate-800"
+                          className="absolute left-0 top-full mt-2 z-40 w-[200px] bg-white border border-slate-200 rounded-xl shadow-xl p-3 font-normal text-slate-800"
                         >
-                          <div className="p-2.5 border-b bg-slate-50">
-                            <div className="relative">
-                              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                              <input
-                                value={orderFilterKeyword}
-                                onChange={(e) => setOrderFilterKeyword(e.target.value)}
-                                placeholder="Tìm kiếm trạng thái..."
-                                className="w-full border rounded-lg pl-8 pr-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="max-h-[190px] overflow-y-auto py-1.5">
-                            {filteredOrderOptions.map((item) => (
-                              <label
-                                key={item.value}
-                                className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-slate-50 cursor-pointer text-xs"
+                          <div className="text-xs font-bold text-slate-700 mb-2">Lọc TT đơn hàng</div>
+                          <div className="space-y-1.5">
+                            {[
+                              { value: "all", label: "Tất cả trạng thái" },
+                              { value: "pending", label: "Chờ xử lý" },
+                              { value: "confirmed", label: "Đã xác nhận" },
+                              { value: "shipping", label: "Đang giao" },
+                              { value: "completed", label: "Hoàn thành" },
+                              { value: "cancelled", label: "Đã hủy" },
+                            ].map((opt) => (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => {
+                                  setOrderStatusFilter(opt.value);
+                                  setOrderFilterOpen(false);
+                                }}
+                                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+                                  orderStatusFilter === opt.value
+                                    ? "bg-orange-50 text-orange-600 font-bold"
+                                    : "text-slate-600 hover:bg-slate-50"
+                                }`}
                               >
-                                <input
-                                  type="checkbox"
-                                  checked={orderStatusFilters.includes(item.value)}
-                                  onChange={() => toggleOrderStatusFilter(item.value)}
-                                  className="w-3.5 h-3.5 rounded text-orange-600 focus:ring-orange-500 cursor-pointer"
-                                />
-                                <span className="font-medium text-slate-700">{item.label}</span>
-                              </label>
+                                {opt.label}
+                              </button>
                             ))}
-                          </div>
-
-                          <div className="border-t px-3 py-2 flex items-center justify-between bg-slate-50 text-xs">
-                            <button
-                              type="button"
-                              onClick={() => setOrderStatusFilters([])}
-                              className="text-slate-500 hover:text-slate-800 font-medium"
-                            >
-                              Xóa
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setOrderFilterOpen(false)}
-                              className="px-3 py-1 rounded bg-orange-500 text-white hover:bg-orange-600 font-medium cursor-pointer"
-                            >
-                              Đồng ý
-                            </button>
                           </div>
                         </div>
                       )}
@@ -954,7 +1004,7 @@ export default function AdminOrders() {
                 {filteredOrders.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={isSelecting ? 8 : 7}
                       className="py-16 text-center text-slate-500 font-medium"
                     >
                       <div className="max-w-md mx-auto space-y-2">
@@ -977,116 +1027,221 @@ export default function AdminOrders() {
                     </td>
                   </tr>
                 ) : (
-                  filteredOrders.map((order) => (
-                    <tr key={String(order.id)} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="p-3 border-b whitespace-nowrap font-bold text-slate-400 text-sm">
-                        #{order.id}
-                      </td>
+                  filteredOrders.map((order) => {
+                    const isChecked = selectedIds.has(order.id);
+                    return (
+                      <tr
+                        key={String(order.id)}
+                        onClick={
+                          isSelecting ? () => toggleSelectId(order.id) : undefined
+                        }
+                        className={`transition-colors select-none ${
+                          isChecked
+                            ? "bg-orange-50/70 hover:bg-orange-100/60"
+                            : "hover:bg-slate-50/70"
+                        } ${isSelecting ? "cursor-pointer" : ""}`}
+                      >
+                        {/* Ô trống chọn bản ghi */}
+                        {isSelecting && (
+                          <td
+                            className="p-3 border-b text-center w-12 cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleSelectId(order.id);
+                            }}
+                          >
+                            <div className="flex items-center justify-center">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={() => toggleSelectId(order.id)}
+                                className="w-4 h-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer accent-orange-600"
+                              />
+                            </div>
+                          </td>
+                        )}
 
-                      <td className="p-3 border-b min-w-[220px]">
-                        <div className="font-semibold text-slate-800 text-sm">
-                          {order.customerName}
-                        </div>
-                        <div className="text-xs text-slate-500 mt-1">
-                          SĐT: {order.phone || "-"}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          Địa chỉ: {order.address || "-"}
-                        </div>
-                      </td>
+                        <td className="p-3 border-b whitespace-nowrap font-bold text-slate-400 text-sm">
+                          #{order.id}
+                        </td>
 
-                      <td className="p-3 border-b font-bold text-orange-600 text-sm whitespace-nowrap">
-                        {Number(order.totalAmount || 0).toLocaleString("vi-VN")} đ
-                      </td>
+                        <td className="p-3 border-b min-w-[220px]">
+                          <div className="font-semibold text-slate-800 text-sm">
+                            {order.customerName}
+                          </div>
+                          <div className="text-xs text-slate-500 mt-1">
+                            SĐT: {order.phone || "-"}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            Địa chỉ: {order.address || "-"}
+                          </div>
+                        </td>
 
-                      <td className="p-3 border-b text-slate-600 text-sm whitespace-nowrap">
-                        {formatPaymentMethod(order.paymentMethod)}
-                      </td>
+                        <td className="p-3 border-b font-bold text-orange-600 text-sm whitespace-nowrap">
+                          {Number(order.totalAmount || 0).toLocaleString("vi-VN")} đ
+                        </td>
 
-                      {/* Cột TT thanh toán */}
-                      <td className="p-3 border-b">
-                        {isEditingTable ? (
-                          <div className="relative inline-flex items-center">
-                            <select
-                              value={order.paymentStatus}
-                              onChange={(e) =>
-                                handleLocalStatusChange(order.id, "paymentStatus", e.target.value)
-                              }
-                              className={`appearance-none cursor-pointer pl-3.5 pr-8 py-1.5 rounded-full text-xs font-semibold border transition-all hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 ${paymentStatusClass(
+                        <td className="p-3 border-b text-slate-600 text-sm whitespace-nowrap">
+                          {formatPaymentMethod(order.paymentMethod)}
+                        </td>
+
+                        {/* Cột TT thanh toán */}
+                        <td className="p-3 border-b">
+                          {isEditingTable ? (
+                            <div className="relative inline-flex items-center">
+                              <select
+                                value={order.paymentStatus}
+                                onChange={(e) =>
+                                  handleLocalStatusChange(order.id, "paymentStatus", e.target.value)
+                                }
+                                onKeyDown={handleTableKeyDown}
+                                className={`appearance-none cursor-pointer pl-3.5 pr-8 py-1.5 rounded-full text-xs font-semibold border transition-all hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 ${paymentStatusClass(
+                                  order.paymentStatus
+                                )}`}
+                                title="Bấm để chọn trạng thái thanh toán (Nhấn Enter để lưu)"
+                              >
+                                {PAYMENT_STATUS_OPTIONS.map((item) => (
+                                  <option
+                                    key={item.value}
+                                    value={item.value}
+                                    className="bg-white text-slate-800 font-medium py-1"
+                                  >
+                                    {item.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 pointer-events-none opacity-60" />
+                            </div>
+                          ) : (
+                            <span
+                              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${paymentStatusClass(
                                 order.paymentStatus
                               )}`}
-                              title="Bấm để chọn trạng thái thanh toán"
                             >
-                              {PAYMENT_STATUS_OPTIONS.map((item) => (
-                                <option
-                                  key={item.value}
-                                  value={item.value}
-                                  className="bg-white text-slate-800 font-medium py-1"
-                                >
-                                  {item.label}
-                                </option>
-                              ))}
-                            </select>
-                            <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 pointer-events-none opacity-60" />
-                          </div>
-                        ) : (
-                          <span
-                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${paymentStatusClass(
-                              order.paymentStatus
-                            )}`}
-                          >
-                            {paymentStatusLabel(order.paymentStatus)}
-                          </span>
-                        )}
-                      </td>
+                              {paymentStatusLabel(order.paymentStatus)}
+                            </span>
+                          )}
+                        </td>
 
-                      {/* Cột TT đơn hàng */}
-                      <td className="p-3 border-b">
-                        {isEditingTable ? (
-                          <div className="relative inline-flex items-center">
-                            <select
-                              value={order.orderStatus}
-                              onChange={(e) =>
-                                handleLocalStatusChange(order.id, "orderStatus", e.target.value)
-                              }
-                              className={`appearance-none cursor-pointer pl-3.5 pr-8 py-1.5 rounded-full text-xs font-semibold border transition-all hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 ${orderStatusClass(
+                        {/* Cột TT đơn hàng */}
+                        <td className="p-3 border-b">
+                          {isEditingTable ? (
+                            <div className="relative inline-flex items-center">
+                              <select
+                                value={order.orderStatus}
+                                onChange={(e) =>
+                                  handleLocalStatusChange(order.id, "orderStatus", e.target.value)
+                                }
+                                onKeyDown={handleTableKeyDown}
+                                className={`appearance-none cursor-pointer pl-3.5 pr-8 py-1.5 rounded-full text-xs font-semibold border transition-all hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 ${orderStatusClass(
+                                  order.orderStatus
+                                )}`}
+                                title="Bấm để chọn trạng thái đơn hàng (Nhấn Enter để lưu)"
+                              >
+                                {ORDER_STATUS_OPTIONS.map((item) => (
+                                  <option
+                                    key={item.value}
+                                    value={item.value}
+                                    className="bg-white text-slate-800 font-medium py-1"
+                                  >
+                                    {item.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 pointer-events-none opacity-60" />
+                            </div>
+                          ) : (
+                            <span
+                              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${orderStatusClass(
                                 order.orderStatus
                               )}`}
-                              title="Bấm để chọn trạng thái đơn hàng"
                             >
-                              {ORDER_STATUS_OPTIONS.map((item) => (
-                                <option
-                                  key={item.value}
-                                  value={item.value}
-                                  className="bg-white text-slate-800 font-medium py-1"
-                                >
-                                  {item.label}
-                                </option>
-                              ))}
-                            </select>
-                            <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 pointer-events-none opacity-60" />
-                          </div>
-                        ) : (
-                          <span
-                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${orderStatusClass(
-                              order.orderStatus
-                            )}`}
-                          >
-                            {orderStatusLabel(order.orderStatus)}
-                          </span>
-                        )}
-                      </td>
+                              {orderStatusLabel(order.orderStatus)}
+                            </span>
+                          )}
+                        </td>
 
-                      <td className="p-3 border-b text-slate-600 text-sm whitespace-nowrap">
-                        {formatDate(order.createdAt)}
-                      </td>
-                    </tr>
-                  )))}
+                        <td className="p-3 border-b text-slate-600 text-sm whitespace-nowrap">
+                          {formatDate(order.createdAt)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
         )}
       </div>
+
+      {/* Modal Xác Nhận Xóa Hàng Loạt Khi Bấm Chọn */}
+      {showBatchDeleteModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => !isDeletingBatch && setShowBatchDeleteModal(false)}
+        >
+          <div
+            className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 p-6 animate-in zoom-in-95 duration-150 text-slate-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <h3 className="text-base font-bold text-center text-slate-900 mb-1">
+              Xóa {selectedIds.size} đơn hàng đã chọn?
+            </h3>
+            <p className="text-xs text-center text-slate-500 mb-4">
+              Bạn có chắc chắn muốn xóa {selectedIds.size} đơn hàng này không? Thao tác này sẽ xóa vĩnh viễn đơn hàng và chi tiết đơn hàng trên hệ thống, không thể hoàn tác.
+            </p>
+
+            <div className="max-h-32 overflow-y-auto mb-5 p-2 bg-slate-50 rounded-xl border border-slate-200/80 flex flex-wrap gap-1.5 justify-center">
+              {Array.from(selectedIds).map((id) => {
+                const o = orders.find((item) => item.id === id);
+                return (
+                  <span
+                    key={String(id)}
+                    className="px-2 py-0.5 text-xs font-semibold bg-white text-red-600 border border-red-200 rounded-md"
+                  >
+                    #{id} {o ? `- ${o.customerName}` : ""}
+                  </span>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowBatchDeleteModal(false)}
+                disabled={isDeletingBatch}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-all cursor-pointer disabled:opacity-50"
+              >
+                Hủy
+              </button>
+
+              <button
+                type="button"
+                onClick={handleBatchDelete}
+                disabled={isDeletingBatch}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingBatch ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Đang xóa...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Xác nhận xóa</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

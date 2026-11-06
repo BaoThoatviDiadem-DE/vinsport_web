@@ -9,11 +9,13 @@
     "start": "node src/server.js",
     "db:init": "node scripts/init_db.js",
     "sync:images": "node scripts/sync_images_to_s3.js",
-    "dynamo:setup": "node scripts/setup_dynamodb.js"
+    "dynamo:setup": "node scripts/setup_dynamodb.js",
+    "lambda:test": "node scripts/setup_lambda.js"
   },
   "dependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.1162.0",
     "@aws-sdk/client-dynamodb": "^3.1162.0",
+    "@aws-sdk/client-lambda": "^3.1163.0",
     "@aws-sdk/client-s3": "^3.1146.0",
     "@aws-sdk/client-sns": "^3.1161.0",
     "@aws-sdk/client-sqs": "^3.1161.0",

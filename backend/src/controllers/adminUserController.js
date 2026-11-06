@@ -152,7 +152,65 @@ const updateAdminUser = async (req, res) => {
   }
 };
 
+const deleteAdminUser = async (req, res) => {
+  try {
+    const userId = Number(req.params.id);
+    if (!userId) {
+      return res.status(400).json({ message: "ID người dùng không hợp lệ" });
+    }
+    if (req.user && req.user.user_id === userId) {
+      return res.status(400).json({ message: "Không thể tự xóa tài khoản đang đăng nhập" });
+    }
+
+    const pool = await poolPromise;
+    await pool.request().input("uid", sql.Int, userId).query(`
+      DELETE FROM CartItems WHERE cart_id IN (SELECT cart_id FROM Carts WHERE user_id = @uid);
+      DELETE FROM Carts WHERE user_id = @uid;
+      DELETE FROM OrderDetails WHERE order_id IN (SELECT order_id FROM Orders WHERE user_id = @uid);
+      DELETE FROM Payments WHERE order_id IN (SELECT order_id FROM Orders WHERE user_id = @uid);
+      DELETE FROM Orders WHERE user_id = @uid;
+      DELETE FROM Users WHERE user_id = @uid;
+    `);
+
+    return res.json({ success: true, message: "Đã xóa người dùng thành công" });
+  } catch (error) {
+    console.error("DELETE ADMIN USER ERROR:", error);
+    return res.status(500).json({ message: error.message || "Không thể xóa người dùng" });
+  }
+};
+
+const deleteAdminUsersBatch = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: "Danh sách người dùng cần xóa không hợp lệ" });
+    }
+
+    const pool = await poolPromise;
+    const cleanIds = ids.map(Number).filter((id) => !isNaN(id) && id > 0);
+
+    for (const uid of cleanIds) {
+      if (req.user && req.user.user_id === uid) continue;
+      await pool.request().input("uid", sql.Int, uid).query(`
+        DELETE FROM CartItems WHERE cart_id IN (SELECT cart_id FROM Carts WHERE user_id = @uid);
+        DELETE FROM Carts WHERE user_id = @uid;
+        DELETE FROM OrderDetails WHERE order_id IN (SELECT order_id FROM Orders WHERE user_id = @uid);
+        DELETE FROM Payments WHERE order_id IN (SELECT order_id FROM Orders WHERE user_id = @uid);
+        DELETE FROM Orders WHERE user_id = @uid;
+        DELETE FROM Users WHERE user_id = @uid;
+      `);
+    }
+
+    return res.json({ success: true, message: `Đã xóa thành công ${cleanIds.length} người dùng!` });
+  } catch (error) {
+    console.error("BATCH DELETE ADMIN USERS ERROR:", error);
+    return res.status(500).json({ message: error.message || "Không thể xóa danh sách người dùng" });
+  }
+};
+
 module.exports = {
   getAdminUsers,
   updateAdminUser,
+  deleteAdminUser,
+  deleteAdminUsersBatch,
 };

@@ -15,6 +15,8 @@ import {
   Filter,
   Search,
   Check,
+  RotateCcw,
+  CheckSquare,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import api from "../api/api";
@@ -287,6 +289,12 @@ export default function AdminProducts() {
     setCategoryFilterOpen(false);
     setBrandSearchOpen(false);
     setStockSearchOpen(false);
+
+    if (hasActiveFilters) {
+      toast.success("Đã xóa tất cả bộ lọc");
+    } else {
+      toast("Không có bộ lọc nào đang áp dụng", { icon: "ℹ️" });
+    }
   };
   const [form, setForm] = useState<Product>(emptyForm);
   const [isEditing, setIsEditing] = useState(false);
@@ -298,6 +306,44 @@ export default function AdminProducts() {
   const [isEditingTable, setIsEditingTable] = useState(false);
   const [originalProducts, setOriginalProducts] = useState<Product[]>([]);
   const [isSavingAll, setIsSavingAll] = useState(false);
+
+  // Chế độ Chọn (Select mode) để xóa nhiều bản ghi
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number | string>>(new Set());
+  const [isDeletingBatch, setIsDeletingBatch] = useState(false);
+  const [showBatchDeleteModal, setShowBatchDeleteModal] = useState(false);
+
+  const toggleSelectId = (id: number | string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setIsDeletingBatch(true);
+    try {
+      const idsArray = Array.from(selectedIds);
+      await api.post("/admin/products/batch-delete", { ids: idsArray });
+      toast.success(`Đã xóa thành công ${idsArray.length} sản phẩm!`);
+      setProducts((prev) => prev.filter((p) => p.id && !selectedIds.has(p.id)));
+      setOriginalProducts((prev) => prev.filter((p) => p.id && !selectedIds.has(p.id)));
+      setSelectedIds(new Set());
+      setIsSelecting(false);
+      setShowBatchDeleteModal(false);
+    } catch (err: any) {
+      console.error("Lỗi xóa hàng loạt sản phẩm:", err);
+      toast.error(err?.response?.data?.message || "Không thể xóa các sản phẩm đã chọn");
+    } finally {
+      setIsDeletingBatch(false);
+    }
+  };
 
   // State modal popup thêm / chỉnh sửa sản phẩm
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -622,6 +668,18 @@ export default function AdminProducts() {
     setProducts((prev) =>
       prev.map((p) => (p.id === id ? { ...p, [field]: value } : p))
     );
+  };
+
+  const handleTableKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (!isSavingAll) {
+        handleSaveAllProducts();
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      handleCancelEdit();
+    }
   };
 
   const handleSaveAllProducts = async () => {
@@ -1024,49 +1082,108 @@ export default function AdminProducts() {
             <FileSpreadsheet className="w-4 h-4" />
             <span>Nhập từ file Excel</span>
           </button>
-
-          <button
-            type="button"
-            onClick={handleOpenAddModal}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-semibold text-sm transition-all shadow-md shadow-orange-200 cursor-pointer"
-            title="Thêm sản phẩm mới"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Thêm sản phẩm mới</span>
-          </button>
         </div>
       </div>
 
       {/* DANH SÁCH SẢN PHẨM HIỆN TẠI */}
       <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 md:p-8">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-6 rounded-full bg-orange-500" />
-            <h2 className="text-xl font-bold text-slate-900">Danh sách sản phẩm</h2>
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-6 rounded-full bg-orange-500" />
+              <h2 className="text-xl font-bold text-slate-900">Danh sách sản phẩm</h2>
+            </div>
+
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                hasActiveFilters
+                  ? "text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 border-orange-200 shadow-sm active:scale-95"
+                  : "text-slate-400 hover:text-slate-600 bg-slate-50 hover:bg-slate-100 border-slate-200"
+              }`}
+              title="Xóa tất cả bộ lọc tìm kiếm"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Xóa lọc</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-2.5">
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={clearAllFilters}
-                className="text-xs font-semibold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200/60 px-3.5 py-2 rounded-xl transition-colors cursor-pointer"
-              >
-                Xóa tất cả lọc
-              </button>
-            )}
-
             {!isEditingTable ? (
-              <button
-                type="button"
-                onClick={handleStartEdit}
-                disabled={isLoading}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
-                title="Bấm để chỉnh sửa dữ liệu sản phẩm"
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-                <span>Chỉnh sửa</span>
-              </button>
+              <>
+                {!isSelecting ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleOpenAddModal}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs transition-all shadow-sm active:scale-95 cursor-pointer"
+                      title="Thêm sản phẩm mới"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Thêm sản phẩm</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleStartEdit}
+                      disabled={isLoading}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
+                      title="Bấm để chỉnh sửa dữ liệu sản phẩm"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Chỉnh sửa</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsSelecting(true);
+                        setSelectedIds(new Set());
+                      }}
+                      disabled={isLoading || products.length === 0}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
+                      title="Bấm để chọn bản ghi cần xóa"
+                    >
+                      <CheckSquare className="w-3.5 h-3.5" />
+                      <span>Chọn</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsSelecting(false);
+                        setSelectedIds(new Set());
+                      }}
+                      className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold transition-all cursor-pointer"
+                    >
+                      Hủy
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedIds.size === 0) {
+                          toast.error("Vui lòng chọn ít nhất một sản phẩm để xóa!");
+                          return;
+                        }
+                        setShowBatchDeleteModal(true);
+                      }}
+                      className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-white font-bold text-xs shadow-sm active:scale-95 transition-all cursor-pointer ${
+                        selectedIds.size > 0
+                          ? "bg-red-600 hover:bg-red-700"
+                          : "bg-red-500/80 hover:bg-red-600"
+                      }`}
+                      title="Xóa các sản phẩm đã chọn"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Xóa{selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}</span>
+                    </button>
+                  </>
+                )}
+              </>
             ) : (
               <>
                 <button
@@ -1122,6 +1239,47 @@ export default function AdminProducts() {
             <table className="w-full min-w-[950px] border-collapse text-sm">
               <thead>
                 <tr className="bg-slate-100 text-left">
+                  {/* Ô chọn hàng loạt khi bật chế độ Chọn */}
+                  {isSelecting && (
+                    <th
+                      className="p-3 border-b w-12 text-center cursor-pointer select-none"
+                      onClick={() => {
+                        const allSelected =
+                          filteredProducts.length > 0 &&
+                          filteredProducts.every((p) => p.id && selectedIds.has(p.id));
+                        if (allSelected) {
+                          setSelectedIds(new Set());
+                        } else {
+                          setSelectedIds(
+                            new Set(filteredProducts.map((p) => p.id!).filter(Boolean))
+                          );
+                        }
+                      }}
+                      title="Chọn tất cả bản ghi"
+                    >
+                      <div className="flex items-center justify-center">
+                        <input
+                          type="checkbox"
+                          checked={
+                            filteredProducts.length > 0 &&
+                            filteredProducts.every((p) => p.id && selectedIds.has(p.id))
+                          }
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedIds(
+                                new Set(filteredProducts.map((p) => p.id!).filter(Boolean))
+                              );
+                            } else {
+                              setSelectedIds(new Set());
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer accent-orange-600"
+                        />
+                      </div>
+                    </th>
+                  )}
+
                   {/* ID */}
                   <th className="p-3 border-b min-w-[110px] relative">
                     <div ref={idSearchRef} className="relative inline-block text-left">
@@ -1352,8 +1510,8 @@ export default function AdminProducts() {
                         <span>Danh mục</span>
                         <Filter
                           className={`w-3.5 h-3.5 transition-colors ${categoryFilter !== "all"
-                              ? "text-orange-600 fill-orange-500"
-                              : "text-slate-400 group-hover:text-slate-600"
+                            ? "text-orange-600 fill-orange-500"
+                            : "text-slate-400 group-hover:text-slate-600"
                             }`}
                         />
                         {categoryFilter !== "all" && (
@@ -1364,51 +1522,32 @@ export default function AdminProducts() {
                       {categoryFilterOpen && (
                         <div
                           onClick={(e) => e.stopPropagation()}
-                          className="absolute left-0 top-full mt-2 z-40 w-[200px] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden font-normal text-slate-800 p-2 text-xs"
+                          className="absolute left-0 top-full mt-2 z-40 w-[200px] bg-white border border-slate-200 rounded-xl shadow-xl p-3 font-normal text-slate-800"
                         >
-                          <div className="font-bold text-slate-700 px-2 py-1 mb-1 border-b">
-                            Lọc Danh mục
-                          </div>
-                          <div className="space-y-1">
+                          <div className="text-xs font-bold text-slate-700 mb-2">Lọc theo danh mục</div>
+                          <div className="space-y-1.5">
                             {[
-                              { value: "all", label: "Tất cả" },
+                              { value: "all", label: "Tất cả danh mục" },
                               { value: "Áo", label: "Áo" },
                               { value: "Quần", label: "Quần" },
                               { value: "Giày", label: "Giày" },
-                            ].map((item) => (
-                              <label
-                                key={item.value}
-                                className="flex items-center gap-2.5 px-2 py-1.5 hover:bg-slate-50 rounded-lg cursor-pointer text-xs"
+                            ].map((opt) => (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => {
+                                  setCategoryFilter(opt.value as CategoryFilter);
+                                  setCategoryFilterOpen(false);
+                                }}
+                                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+                                  categoryFilter === opt.value
+                                    ? "bg-orange-50 text-orange-600 font-bold"
+                                    : "text-slate-600 hover:bg-slate-50"
+                                }`}
                               >
-                                <input
-                                  type="radio"
-                                  name="categoryFilterRadio"
-                                  checked={categoryFilter === item.value}
-                                  onChange={() => setCategoryFilter(item.value as CategoryFilter)}
-                                  className="w-3.5 h-3.5 text-orange-600 focus:ring-orange-500 cursor-pointer"
-                                />
-                                <span className="font-medium text-slate-700">{item.label}</span>
-                              </label>
+                                {opt.label}
+                              </button>
                             ))}
-                          </div>
-                          <div className="border-t px-2 pt-2 mt-1 flex items-center justify-between text-xs">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCategoryFilter("all");
-                                setCategoryFilterOpen(false);
-                              }}
-                              className="text-slate-500 hover:text-slate-800 font-medium cursor-pointer"
-                            >
-                              Đặt lại
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setCategoryFilterOpen(false)}
-                              className="px-3 py-1 rounded bg-orange-500 text-white hover:bg-orange-600 font-medium cursor-pointer"
-                            >
-                              Đồng ý
-                            </button>
                           </div>
                         </div>
                       )}
@@ -1560,7 +1699,7 @@ export default function AdminProducts() {
                 {filteredProducts.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={isSelecting ? 8 : 7}
                       className="py-16 text-center text-slate-500 font-medium"
                     >
                       <div className="max-w-md mx-auto space-y-2">
@@ -1583,9 +1722,42 @@ export default function AdminProducts() {
                     </td>
                   </tr>
                 ) : (
-                  filteredProducts.map((product) => (
-                    <tr key={String(product.id)} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="p-3 border-b whitespace-nowrap font-bold text-slate-400 text-sm">
+                  filteredProducts.map((product) => {
+                    const isChecked = Boolean(product.id && selectedIds.has(product.id));
+                    return (
+                      <tr
+                        key={String(product.id)}
+                        onClick={
+                          isSelecting && product.id ? () => toggleSelectId(product.id!) : undefined
+                        }
+                        className={`transition-colors select-none ${
+                          isChecked
+                            ? "bg-orange-50/70 hover:bg-orange-100/60"
+                            : "hover:bg-slate-50/70"
+                        } ${isSelecting ? "cursor-pointer" : ""}`}
+                      >
+                        {/* Ô trống chọn bản ghi */}
+                        {isSelecting && (
+                          <td
+                            className="p-3 border-b text-center w-12 cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (product.id) toggleSelectId(product.id);
+                            }}
+                          >
+                            <div className="flex items-center justify-center">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={() => product.id && toggleSelectId(product.id)}
+                                className="w-4 h-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer accent-orange-600"
+                              />
+                            </div>
+                          </td>
+                        )}
+
+                        <td className="p-3 border-b whitespace-nowrap font-bold text-slate-400 text-sm">
                         #{product.id}
                       </td>
 
@@ -1611,6 +1783,7 @@ export default function AdminProducts() {
                             onChange={(e) =>
                               handleProductFieldChange(product.id, "name", e.target.value)
                             }
+                            onKeyDown={handleTableKeyDown}
                             className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white font-semibold text-slate-800"
                             placeholder="Tên sản phẩm..."
                           />
@@ -1629,6 +1802,7 @@ export default function AdminProducts() {
                             onChange={(e) =>
                               handleProductFieldChange(product.id, "price", e.target.value)
                             }
+                            onKeyDown={handleTableKeyDown}
                             className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white font-bold text-orange-600"
                             placeholder="Giá bán..."
                           />
@@ -1647,6 +1821,7 @@ export default function AdminProducts() {
                             onChange={(e) =>
                               handleProductFieldChange(product.id, "category", e.target.value)
                             }
+                            onKeyDown={handleTableKeyDown}
                             className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white"
                             placeholder="Danh mục..."
                           />
@@ -1663,6 +1838,7 @@ export default function AdminProducts() {
                             onChange={(e) =>
                               handleProductFieldChange(product.id, "brand", e.target.value)
                             }
+                            onKeyDown={handleTableKeyDown}
                             className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white"
                             placeholder="Thương hiệu..."
                           />
@@ -1680,24 +1856,25 @@ export default function AdminProducts() {
                             onChange={(e) =>
                               handleProductFieldChange(product.id, "stock", e.target.value)
                             }
+                            onKeyDown={handleTableKeyDown}
                             className="w-24 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white"
                             placeholder="Tồn kho..."
                           />
                         ) : (
                           <span
-                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${
-                              Number(product.stock || 0) > 0
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                : "bg-red-50 text-red-700 border-red-200"
-                            }`}
+                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${Number(product.stock || 0) > 0
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : "bg-red-50 text-red-700 border-red-200"
+                              }`}
                           >
                             {product.stock ?? 0}
                           </span>
                         )}
                       </td>
                     </tr>
-                  ))
-                )}
+                  );
+                })
+              )}
               </tbody>
             </table>
           </div>
@@ -1989,9 +2166,6 @@ export default function AdminProducts() {
                   <h3 className="text-xl font-bold text-slate-900">
                     Kiểm tra dữ liệu nhập từ file Excel
                   </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Hệ thống đã tự động kiểm tra tính hợp lệ và đánh dấu chi tiết từng cột dữ liệu
-                  </p>
                 </div>
               </div>
 
@@ -2275,6 +2449,73 @@ export default function AdminProducts() {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal Xác Nhận Xóa Hàng Loạt Khi Bấm Chọn */}
+      {showBatchDeleteModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => !isDeletingBatch && setShowBatchDeleteModal(false)}
+        >
+          <div
+            className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 p-6 animate-in zoom-in-95 duration-150 text-slate-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <h3 className="text-base font-bold text-center text-slate-900 mb-1">
+              Xóa {selectedIds.size} sản phẩm đã chọn?
+            </h3>
+            <p className="text-xs text-center text-slate-500 mb-4">
+              Bạn có chắc chắn muốn xóa {selectedIds.size} sản phẩm này không? Thao tác này sẽ xóa vĩnh viễn dữ liệu trên hệ thống và không thể hoàn tác.
+            </p>
+
+            <div className="max-h-32 overflow-y-auto mb-5 p-2 bg-slate-50 rounded-xl border border-slate-200/80 flex flex-wrap gap-1.5 justify-center">
+              {Array.from(selectedIds).map((id) => {
+                const prod = products.find((p) => p.id === id);
+                return (
+                  <span
+                    key={String(id)}
+                    className="px-2 py-0.5 text-xs font-semibold bg-white text-red-600 border border-red-200 rounded-md"
+                  >
+                    #{id} {prod ? `- ${prod.name}` : ""}
+                  </span>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowBatchDeleteModal(false)}
+                disabled={isDeletingBatch}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-all cursor-pointer disabled:opacity-50"
+              >
+                Hủy
+              </button>
+
+              <button
+                type="button"
+                onClick={handleBatchDelete}
+                disabled={isDeletingBatch}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingBatch ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Đang xóa...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Xác nhận xóa</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

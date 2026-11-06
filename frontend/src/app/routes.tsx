@@ -11,6 +11,7 @@ import AdminProducts from "./pages/AdminProducts";
 import AdminUsers from "./pages/AdminUsers";
 import AdminOrders from "./pages/AdminOrders";
 import AdminAnalytics from "./pages/AdminAnalytics";
+import AdminVouchers from "./pages/AdminVouchers";
 import ProtectedAdminRoute from "./components/ProtectedAdminRoute";
 
 export const router = createBrowserRouter([
@@ -54,6 +55,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedAdminRoute>
             <AdminOrders />
+          </ProtectedAdminRoute>
+        ),
+      },
+      {
+        path: "admin/vouchers",
+        element: (
+          <ProtectedAdminRoute>
+            <AdminVouchers />
           </ProtectedAdminRoute>
         ),
       },

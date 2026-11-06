@@ -1,5 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Filter, RefreshCw, Edit3, Check, Loader2 } from "lucide-react";
+import {
+  Search,
+  Filter,
+  RefreshCw,
+  Edit3,
+  Check,
+  Loader2,
+  RotateCcw,
+  CheckSquare,
+  Trash2,
+} from "lucide-react";
+import toast from "react-hot-toast";
 import api from "../api/api";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -52,6 +63,44 @@ export default function AdminUsers() {
   const [originalUsers, setOriginalUsers] = useState<UserItem[]>([]);
   const [isSavingAll, setIsSavingAll] = useState(false);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
+
+  // Chế độ Chọn (Select mode) để xóa nhiều bản ghi
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number | string>>(new Set());
+  const [isDeletingBatch, setIsDeletingBatch] = useState(false);
+  const [showBatchDeleteModal, setShowBatchDeleteModal] = useState(false);
+
+  const toggleSelectId = (id: number | string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setIsDeletingBatch(true);
+    try {
+      const idsArray = Array.from(selectedIds);
+      await api.post("/admin/users/batch-delete", { ids: idsArray });
+      toast.success(`Đã xóa thành công ${idsArray.length} người dùng!`);
+      setUsers((prev) => prev.filter((u) => !selectedIds.has(u.id)));
+      setOriginalUsers((prev) => prev.filter((u) => !selectedIds.has(u.id)));
+      setSelectedIds(new Set());
+      setIsSelecting(false);
+      setShowBatchDeleteModal(false);
+    } catch (err: any) {
+      console.error("Lỗi xóa hàng loạt người dùng:", err);
+      toast.error(err?.response?.data?.message || "Không thể xóa các người dùng đã chọn");
+    } finally {
+      setIsDeletingBatch(false);
+    }
+  };
 
   // State tìm kiếm theo từng cột
   const [idSearch, setIdSearch] = useState("");
@@ -182,6 +231,12 @@ export default function AdminUsers() {
     setPhoneSearchOpen(false);
     setAddressSearchOpen(false);
     setRoleFilterOpen(false);
+
+    if (hasActiveFilters) {
+      toast.success("Đã xóa tất cả bộ lọc");
+    } else {
+      toast("Không có bộ lọc nào đang áp dụng", { icon: "ℹ️" });
+    }
   };
 
   const filteredUsers = useMemo(() => {
@@ -383,6 +438,18 @@ export default function AdminUsers() {
     }
   };
 
+  const handleTableKeyDown = (e: React.KeyboardEvent<any>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (!isSavingAll) {
+        handleSaveAllUsers();
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      handleCancelEdit();
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 py-8 space-y-8">
       {/* Header */}
@@ -398,33 +465,92 @@ export default function AdminUsers() {
       {/* Danh sách người dùng & Bảng */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-5 md:p-6">
         <div className="flex items-center gap-2.5 flex-wrap mb-4 justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-6 rounded-full bg-orange-500" />
-            <h2 className="text-xl font-bold text-slate-900">Danh sách người dùng</h2>
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-6 rounded-full bg-orange-500" />
+              <h2 className="text-xl font-bold text-slate-900">Danh sách người dùng</h2>
+            </div>
+
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                hasActiveFilters
+                  ? "text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 border-orange-200 shadow-sm active:scale-95"
+                  : "text-slate-400 hover:text-slate-600 bg-slate-50 hover:bg-slate-100 border-slate-200"
+              }`}
+              title="Xóa tất cả bộ lọc tìm kiếm"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Xóa lọc</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-2.5">
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={clearAllFilters}
-                className="text-xs font-semibold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200/60 px-3.5 py-2 rounded-xl transition-colors cursor-pointer"
-              >
-                Xóa tất cả lọc
-              </button>
-            )}
-
             {!isEditingTable ? (
-              <button
-                type="button"
-                onClick={handleStartEdit}
-                disabled={isLoading}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
-                title="Bấm để chỉnh sửa dữ liệu người dùng"
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-                <span>Chỉnh sửa</span>
-              </button>
+              <>
+                {!isSelecting ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleStartEdit}
+                      disabled={isLoading}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
+                      title="Bấm để chỉnh sửa dữ liệu người dùng"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Chỉnh sửa</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsSelecting(true);
+                        setSelectedIds(new Set());
+                      }}
+                      disabled={isLoading || users.length === 0}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
+                      title="Bấm để chọn bản ghi cần xóa"
+                    >
+                      <CheckSquare className="w-3.5 h-3.5" />
+                      <span>Chọn</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsSelecting(false);
+                        setSelectedIds(new Set());
+                      }}
+                      className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold transition-all cursor-pointer"
+                    >
+                      Hủy
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedIds.size === 0) {
+                          toast.error("Vui lòng chọn ít nhất một người dùng để xóa!");
+                          return;
+                        }
+                        setShowBatchDeleteModal(true);
+                      }}
+                      className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-white font-bold text-xs shadow-sm active:scale-95 transition-all cursor-pointer ${
+                        selectedIds.size > 0
+                          ? "bg-red-600 hover:bg-red-700"
+                          : "bg-red-500/80 hover:bg-red-600"
+                      }`}
+                      title="Xóa các người dùng đã chọn"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Xóa{selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}</span>
+                    </button>
+                  </>
+                )}
+              </>
             ) : (
               <>
                 <button
@@ -480,6 +606,43 @@ export default function AdminUsers() {
             <table className="w-full min-w-[1100px] border-collapse">
               <thead>
                 <tr className="bg-slate-100 text-left">
+                  {/* Ô chọn hàng loạt khi bật chế độ Chọn */}
+                  {isSelecting && (
+                    <th
+                      className="p-3 border-b w-12 text-center cursor-pointer select-none"
+                      onClick={() => {
+                        const allSelected =
+                          filteredUsers.length > 0 &&
+                          filteredUsers.every((u) => selectedIds.has(u.id));
+                        if (allSelected) {
+                          setSelectedIds(new Set());
+                        } else {
+                          setSelectedIds(new Set(filteredUsers.map((u) => u.id)));
+                        }
+                      }}
+                      title="Chọn tất cả bản ghi"
+                    >
+                      <div className="flex items-center justify-center">
+                        <input
+                          type="checkbox"
+                          checked={
+                            filteredUsers.length > 0 &&
+                            filteredUsers.every((u) => selectedIds.has(u.id))
+                          }
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedIds(new Set(filteredUsers.map((u) => u.id)));
+                            } else {
+                              setSelectedIds(new Set());
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer accent-orange-600"
+                        />
+                      </div>
+                    </th>
+                  )}
+
                   {/* ID */}
                   <th className="p-3 border-b min-w-[120px] relative">
                     <div ref={idSearchRef} className="relative inline-block text-left">
@@ -859,47 +1022,31 @@ export default function AdminUsers() {
                       {roleFilterOpen && (
                         <div
                           onClick={(e) => e.stopPropagation()}
-                          className="absolute left-0 top-full mt-2 z-40 w-[200px] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden font-normal text-slate-800 p-2 text-xs"
+                          className="absolute left-0 top-full mt-2 z-40 w-[200px] bg-white border border-slate-200 rounded-xl shadow-xl p-3 font-normal text-slate-800"
                         >
-                          <div className="font-bold text-slate-700 px-2 py-1 mb-1 border-b">
-                            Lọc theo Role
-                          </div>
-                          <div className="space-y-1">
+                          <div className="text-xs font-bold text-slate-700 mb-2">Lọc theo Role</div>
+                          <div className="space-y-1.5">
                             {[
-                              { value: "all", label: "Tất cả" },
+                              { value: "all", label: "Tất cả Role" },
                               { value: "admin", label: "Admin" },
                               { value: "user", label: "User" },
-                            ].map((item) => (
-                              <label
-                                key={item.value}
-                                className="flex items-center gap-2.5 px-2 py-1.5 hover:bg-slate-50 rounded-lg cursor-pointer text-xs"
+                            ].map((opt) => (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => {
+                                  setRoleFilter(opt.value as RoleFilter);
+                                  setRoleFilterOpen(false);
+                                }}
+                                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+                                  roleFilter === opt.value
+                                    ? "bg-orange-50 text-orange-600 font-bold"
+                                    : "text-slate-600 hover:bg-slate-50"
+                                }`}
                               >
-                                <input
-                                  type="radio"
-                                  name="roleFilterDropdown"
-                                  checked={roleFilter === item.value}
-                                  onChange={() => setRoleFilter(item.value as RoleFilter)}
-                                  className="w-3.5 h-3.5 text-orange-600 focus:ring-orange-500 cursor-pointer"
-                                />
-                                <span className="font-medium text-slate-700">{item.label}</span>
-                              </label>
+                                {opt.label}
+                              </button>
                             ))}
-                          </div>
-                          <div className="border-t px-2 pt-2 mt-1 flex items-center justify-between text-xs">
-                            <button
-                              type="button"
-                              onClick={() => setRoleFilter("all")}
-                              className="text-slate-500 hover:text-slate-800 font-medium"
-                            >
-                              Đặt lại
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setRoleFilterOpen(false)}
-                              className="px-3 py-1 rounded bg-orange-500 text-white hover:bg-orange-600 font-medium cursor-pointer"
-                            >
-                              Đồng ý
-                            </button>
                           </div>
                         </div>
                       )}
@@ -912,7 +1059,7 @@ export default function AdminUsers() {
                 {filteredUsers.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={isSelecting ? 7 : 6}
                       className="py-16 text-center text-slate-500 font-medium"
                     >
                       <div className="max-w-md mx-auto space-y-2">
@@ -935,102 +1082,209 @@ export default function AdminUsers() {
                     </td>
                   </tr>
                 ) : (
-                  filteredUsers.map((user) => (
-                    <tr key={String(user.id)} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="p-3 border-b whitespace-nowrap font-bold text-slate-400 text-sm">
-                        #{user.id}
-                      </td>
-
-                      <td className="p-3 border-b min-w-[180px]">
-                        {isEditingTable ? (
-                          <input
-                            value={user.name}
-                            onChange={(e) =>
-                              handleFieldChange(user.id, "name", e.target.value)
-                            }
-                            className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white"
-                          />
-                        ) : (
-                          <span className="font-semibold text-slate-800 text-sm">{user.name}</span>
-                        )}
-                      </td>
-
-                      <td className="p-3 border-b min-w-[240px]">
-                        {isEditingTable ? (
-                          <input
-                            value={user.email}
-                            onChange={(e) =>
-                              handleFieldChange(user.id, "email", e.target.value)
-                            }
-                            className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white"
-                          />
-                        ) : (
-                          <span className="text-slate-600 text-sm">{user.email}</span>
-                        )}
-                      </td>
-
-                      <td className="p-3 border-b min-w-[160px]">
-                        {isEditingTable ? (
-                          <input
-                            value={user.phone || ""}
-                            onChange={(e) =>
-                              handleFieldChange(user.id, "phone", e.target.value)
-                            }
-                            placeholder="Số điện thoại..."
-                            className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white"
-                          />
-                        ) : (
-                          <span className="text-slate-600 text-sm">{user.phone || "-"}</span>
-                        )}
-                      </td>
-
-                      <td className="p-3 border-b min-w-[220px]">
-                        {isEditingTable ? (
-                          <input
-                            value={user.address || ""}
-                            onChange={(e) =>
-                              handleFieldChange(user.id, "address", e.target.value)
-                            }
-                            placeholder="Địa chỉ..."
-                            className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white"
-                          />
-                        ) : (
-                          <span className="text-slate-600 text-sm">{user.address || "-"}</span>
-                        )}
-                      </td>
-
-                      <td className="p-3 border-b min-w-[140px]">
-                        {isEditingTable ? (
-                          <select
-                            value={user.role}
-                            onChange={(e) =>
-                              handleFieldChange(user.id, "role", e.target.value)
-                            }
-                            className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white cursor-pointer"
+                  filteredUsers.map((user) => {
+                    const isChecked = selectedIds.has(user.id);
+                    return (
+                      <tr
+                        key={String(user.id)}
+                        onClick={
+                          isSelecting ? () => toggleSelectId(user.id) : undefined
+                        }
+                        className={`transition-colors select-none ${
+                          isChecked
+                            ? "bg-orange-50/70 hover:bg-orange-100/60"
+                            : "hover:bg-slate-50/70"
+                        } ${isSelecting ? "cursor-pointer" : ""}`}
+                      >
+                        {/* Ô trống chọn bản ghi */}
+                        {isSelecting && (
+                          <td
+                            className="p-3 border-b text-center w-12 cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleSelectId(user.id);
+                            }}
                           >
-                            <option value="user">user</option>
-                            <option value="admin">admin</option>
-                          </select>
-                        ) : (
-                          <span
-                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider border ${
-                              user.role === "admin"
-                                ? "bg-rose-50 text-rose-700 border-rose-200"
-                                : "bg-blue-50 text-blue-700 border-blue-200"
-                            }`}
-                          >
-                            {user.role}
-                          </span>
+                            <div className="flex items-center justify-center">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={() => toggleSelectId(user.id)}
+                                className="w-4 h-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer accent-orange-600"
+                              />
+                            </div>
+                          </td>
                         )}
-                      </td>
-                    </tr>
-                  ))
+
+                        <td className="p-3 border-b whitespace-nowrap font-bold text-slate-400 text-sm">
+                          #{user.id}
+                        </td>
+
+                        <td className="p-3 border-b min-w-[180px]">
+                          {isEditingTable ? (
+                            <input
+                              value={user.name}
+                              onChange={(e) =>
+                                handleFieldChange(user.id, "name", e.target.value)
+                              }
+                              onKeyDown={handleTableKeyDown}
+                              className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white"
+                            />
+                          ) : (
+                            <span className="font-semibold text-slate-800 text-sm">{user.name}</span>
+                          )}
+                        </td>
+
+                        <td className="p-3 border-b min-w-[240px]">
+                          {isEditingTable ? (
+                            <input
+                              value={user.email}
+                              onChange={(e) =>
+                                handleFieldChange(user.id, "email", e.target.value)
+                              }
+                              onKeyDown={handleTableKeyDown}
+                              className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white"
+                            />
+                          ) : (
+                            <span className="text-slate-600 text-sm">{user.email}</span>
+                          )}
+                        </td>
+
+                        <td className="p-3 border-b min-w-[160px]">
+                          {isEditingTable ? (
+                            <input
+                              value={user.phone || ""}
+                              onChange={(e) =>
+                                handleFieldChange(user.id, "phone", e.target.value)
+                              }
+                              onKeyDown={handleTableKeyDown}
+                              placeholder="Số điện thoại..."
+                              className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white"
+                            />
+                          ) : (
+                            <span className="text-slate-600 text-sm">{user.phone || "-"}</span>
+                          )}
+                        </td>
+
+                        <td className="p-3 border-b min-w-[220px]">
+                          {isEditingTable ? (
+                            <input
+                              value={user.address || ""}
+                              onChange={(e) =>
+                                handleFieldChange(user.id, "address", e.target.value)
+                              }
+                              onKeyDown={handleTableKeyDown}
+                              placeholder="Địa chỉ..."
+                              className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white"
+                            />
+                          ) : (
+                            <span className="text-slate-600 text-sm">{user.address || "-"}</span>
+                          )}
+                        </td>
+
+                        <td className="p-3 border-b min-w-[140px]">
+                          {isEditingTable ? (
+                            <select
+                              value={user.role}
+                              onChange={(e) =>
+                                handleFieldChange(user.id, "role", e.target.value)
+                              }
+                              onKeyDown={handleTableKeyDown}
+                              className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-orange-500 bg-white cursor-pointer"
+                            >
+                              <option value="user">user</option>
+                              <option value="admin">admin</option>
+                            </select>
+                          ) : (
+                            <span
+                              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider border ${
+                                user.role === "admin"
+                                  ? "bg-rose-50 text-rose-700 border-rose-200"
+                                  : "bg-blue-50 text-blue-700 border-blue-200"
+                              }`}
+                            >
+                              {user.role}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
         )}
       </div>
+
+      {/* Modal Xác Nhận Xóa Hàng Loạt Khi Bấm Chọn */}
+      {showBatchDeleteModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => !isDeletingBatch && setShowBatchDeleteModal(false)}
+        >
+          <div
+            className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 p-6 animate-in zoom-in-95 duration-150 text-slate-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <h3 className="text-base font-bold text-center text-slate-900 mb-1">
+              Xóa {selectedIds.size} người dùng đã chọn?
+            </h3>
+            <p className="text-xs text-center text-slate-500 mb-4">
+              Bạn có chắc chắn muốn xóa {selectedIds.size} người dùng này không? Thao tác này sẽ xóa vĩnh viễn dữ liệu trên hệ thống và không thể hoàn tác.
+            </p>
+
+            <div className="max-h-32 overflow-y-auto mb-5 p-2 bg-slate-50 rounded-xl border border-slate-200/80 flex flex-wrap gap-1.5 justify-center">
+              {Array.from(selectedIds).map((id) => {
+                const u = users.find((item) => item.id === id);
+                return (
+                  <span
+                    key={String(id)}
+                    className="px-2 py-0.5 text-xs font-semibold bg-white text-red-600 border border-red-200 rounded-md"
+                  >
+                    #{id} {u ? `- ${u.name || u.email}` : ""}
+                  </span>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowBatchDeleteModal(false)}
+                disabled={isDeletingBatch}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-all cursor-pointer disabled:opacity-50"
+              >
+                Hủy
+              </button>
+
+              <button
+                type="button"
+                onClick={handleBatchDelete}
+                disabled={isDeletingBatch}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingBatch ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Đang xóa...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Xác nhận xóa</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -442,23 +442,50 @@ const deleteAdminProduct = async (req, res) => {
 
     const pool = await poolPromise;
 
-    const result = await pool
+    await pool
       .request()
       .input("product_id", sql.Int, productId)
       .query(`
-        DELETE FROM Products
-        WHERE product_id = @product_id
+        DELETE FROM CartItems WHERE variant_id IN (SELECT variant_id FROM ProductVariants WHERE product_id = @product_id);
+        DELETE FROM OrderDetails WHERE variant_id IN (SELECT variant_id FROM ProductVariants WHERE product_id = @product_id);
+        DELETE FROM ProductVariants WHERE product_id = @product_id;
+        DELETE FROM ProductImages WHERE product_id = @product_id;
+        DELETE FROM Products WHERE product_id = @product_id;
       `);
-
-    if (result.rowsAffected[0] === 0) {
-      return res.status(404).json({ message: "Không tìm thấy sản phẩm" });
-    }
 
     deleteFromS3("product", productId).catch(console.error);
 
     return res.json({ message: "Xóa sản phẩm thành công" });
   } catch (error) {
     console.error("DELETE ADMIN PRODUCT ERROR:", error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+const deleteAdminProductsBatch = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: "Danh sách sản phẩm cần xóa không hợp lệ" });
+    }
+
+    const pool = await poolPromise;
+    const cleanIds = ids.map(Number).filter((id) => !isNaN(id) && id > 0);
+
+    for (const pid of cleanIds) {
+      await pool.request().input("pid", sql.Int, pid).query(`
+        DELETE FROM CartItems WHERE variant_id IN (SELECT variant_id FROM ProductVariants WHERE product_id = @pid);
+        DELETE FROM OrderDetails WHERE variant_id IN (SELECT variant_id FROM ProductVariants WHERE product_id = @pid);
+        DELETE FROM ProductVariants WHERE product_id = @pid;
+        DELETE FROM ProductImages WHERE product_id = @pid;
+        DELETE FROM Products WHERE product_id = @pid;
+      `);
+      deleteFromS3("product", pid).catch(console.error);
+    }
+
+    return res.json({ success: true, message: `Đã xóa thành công ${cleanIds.length} sản phẩm!` });
+  } catch (error) {
+    console.error("BATCH DELETE PRODUCTS ERROR:", error);
     return res.status(500).json({ message: error.message });
   }
 };
@@ -595,5 +622,6 @@ module.exports = {
   createAdminProduct,
   updateAdminProduct,
   deleteAdminProduct,
+  deleteAdminProductsBatch,
   importAdminProducts,
 };

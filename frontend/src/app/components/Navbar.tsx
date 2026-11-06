@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   Users,
   ClipboardList,
+  Ticket,
   ShoppingCart,
   User,
   LogOut,
@@ -125,6 +126,11 @@ export const Navbar = () => {
       name: "Đơn hàng",
       path: "/admin/orders",
       icon: ClipboardList,
+    },
+    {
+      name: "Mã ưu đãi",
+      path: "/admin/vouchers",
+      icon: Ticket,
     },
   ];
 
