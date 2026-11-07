@@ -1,5 +1,6 @@
 const { sql, poolPromise } = require("../db");
 const { uploadUserToS3 } = require("../utils/s3Service");
+const { recordHistory } = require("../utils/historyService");
 
 const getAdminUsers = async (req, res) => {
   try {
@@ -84,7 +85,7 @@ const updateAdminUser = async (req, res) => {
       .request()
       .input("userId", sql.Int, userId)
       .query(`
-        SELECT TOP 1 user_id
+        SELECT TOP 1 *
         FROM Users
         WHERE user_id = @userId
       `);
@@ -92,6 +93,8 @@ const updateAdminUser = async (req, res) => {
     if (existedUser.recordset.length === 0) {
       return res.status(404).json({ message: "Không tìm thấy người dùng" });
     }
+
+    const oldUser = existedUser.recordset[0];
 
     const existedEmail = await pool
       .request()
@@ -125,6 +128,29 @@ const updateAdminUser = async (req, res) => {
           role = @role
         WHERE user_id = @userId
       `);
+
+    const changes = [];
+    if (oldUser.name !== String(name).trim()) changes.push(`Tên: "${oldUser.name}" ➔ "${String(name).trim()}"`);
+    if (oldUser.email !== String(email).trim()) changes.push(`Email: "${oldUser.email}" ➔ "${String(email).trim()}"`);
+    if ((oldUser.phone || "") !== String(phone).trim()) changes.push(`SĐT: "${oldUser.phone || "Trống"}" ➔ "${String(phone).trim() || "Trống"}"`);
+    if (oldUser.role !== String(role)) changes.push(`Quyền: "${oldUser.role}" ➔ "${String(role)}"`);
+
+    const { password: _pwd, ...safeOldUser } = oldUser;
+
+    await recordHistory({
+      actionType: "UPDATE",
+      entityType: "user",
+      title: `Cập nhật người dùng: ${String(name).trim()}`,
+      description: `Người dùng #${userId} (${String(name).trim()}) - Email: ${String(email).trim()}.${changes.length > 0 ? " Thay đổi: " + changes.join(", ") : ""}`,
+      snapshotData: [{
+        user_id: userId,
+        previous: safeOldUser,
+        updated: { name, email, phone, address, role },
+        changes,
+      }],
+      itemCount: 1,
+      createdBy: req.user?.name || req.user?.email || "Admin",
+    });
 
     // Gửi lên S3
     uploadUserToS3(userId).catch(console.error);
@@ -163,11 +189,29 @@ const deleteAdminUser = async (req, res) => {
     }
 
     const pool = await poolPromise;
+
+    // Lưu snapshot người dùng vào DataHistory trước khi xóa
+    const userRes = await pool.request().input("uid", sql.Int, userId).query("SELECT * FROM Users WHERE user_id = @uid");
+    if (userRes.recordset.length > 0) {
+      const { password: _pwd, ...safeUser } = userRes.recordset[0];
+      await recordHistory({
+        actionType: "DELETE",
+        entityType: "user",
+        title: `Xóa người dùng "${safeUser.name || safeUser.email}"`,
+        description: `Xóa người dùng ${safeUser.name} (${safeUser.email}, Mã: #${userId})`,
+        snapshotData: [safeUser],
+        itemCount: 1,
+        createdBy: req.user?.name || req.user?.email || "Admin",
+      });
+    }
+
     await pool.request().input("uid", sql.Int, userId).query(`
-      DELETE FROM CartItems WHERE cart_id IN (SELECT cart_id FROM Carts WHERE user_id = @uid);
-      DELETE FROM Carts WHERE user_id = @uid;
+      DELETE FROM CartItems WHERE cart_id IN (SELECT cart_id FROM Cart WHERE user_id = @uid);
+      DELETE FROM Cart WHERE user_id = @uid;
+      DELETE FROM Reviews WHERE user_id = @uid;
       DELETE FROM OrderDetails WHERE order_id IN (SELECT order_id FROM Orders WHERE user_id = @uid);
       DELETE FROM Payments WHERE order_id IN (SELECT order_id FROM Orders WHERE user_id = @uid);
+      DELETE FROM Shipping WHERE order_id IN (SELECT order_id FROM Orders WHERE user_id = @uid);
       DELETE FROM Orders WHERE user_id = @uid;
       DELETE FROM Users WHERE user_id = @uid;
     `);
@@ -189,13 +233,42 @@ const deleteAdminUsersBatch = async (req, res) => {
     const pool = await poolPromise;
     const cleanIds = ids.map(Number).filter((id) => !isNaN(id) && id > 0);
 
+    // Thu thập snapshot người dùng trước khi xóa
+    const snapshots = [];
+    const userNames = [];
+
+    for (const uid of cleanIds) {
+      if (req.user && req.user.user_id === uid) continue;
+      const userRes = await pool.request().input("uid", sql.Int, uid).query("SELECT * FROM Users WHERE user_id = @uid");
+      if (userRes.recordset.length > 0) {
+        const { password: _pwd, ...safeU } = userRes.recordset[0];
+        userNames.push(safeU.name || safeU.email || `#${uid}`);
+        snapshots.push(safeU);
+      }
+    }
+
+    if (snapshots.length > 0) {
+      const namesPreview = userNames.slice(0, 4).join(", ") + (userNames.length > 4 ? `, +${userNames.length - 4} người dùng khác` : "");
+      await recordHistory({
+        actionType: "BATCH_DELETE",
+        entityType: "user",
+        title: `Xóa ${snapshots.length} người dùng`,
+        description: `Xóa ${snapshots.length} người dùng: ${namesPreview}`,
+        snapshotData: snapshots,
+        itemCount: snapshots.length,
+        createdBy: req.user?.name || req.user?.email || "Admin",
+      });
+    }
+
     for (const uid of cleanIds) {
       if (req.user && req.user.user_id === uid) continue;
       await pool.request().input("uid", sql.Int, uid).query(`
-        DELETE FROM CartItems WHERE cart_id IN (SELECT cart_id FROM Carts WHERE user_id = @uid);
-        DELETE FROM Carts WHERE user_id = @uid;
+        DELETE FROM CartItems WHERE cart_id IN (SELECT cart_id FROM Cart WHERE user_id = @uid);
+        DELETE FROM Cart WHERE user_id = @uid;
+        DELETE FROM Reviews WHERE user_id = @uid;
         DELETE FROM OrderDetails WHERE order_id IN (SELECT order_id FROM Orders WHERE user_id = @uid);
         DELETE FROM Payments WHERE order_id IN (SELECT order_id FROM Orders WHERE user_id = @uid);
+        DELETE FROM Shipping WHERE order_id IN (SELECT order_id FROM Orders WHERE user_id = @uid);
         DELETE FROM Orders WHERE user_id = @uid;
         DELETE FROM Users WHERE user_id = @uid;
       `);

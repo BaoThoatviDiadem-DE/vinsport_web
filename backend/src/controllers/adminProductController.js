@@ -1,5 +1,6 @@
 const { sql, poolPromise } = require("../db");
 const { uploadProductToS3, deleteFromS3, syncSingleProductImage } = require("../utils/s3Service");
+const { recordHistory } = require("../utils/historyService");
 
 function normalizeSizes(sizes) {
   if (Array.isArray(sizes)) {
@@ -342,6 +343,17 @@ const updateAdminProduct = async (req, res) => {
       return res.status(404).json({ message: "Không tìm thấy sản phẩm" });
     }
 
+    const prodRes = await new sql.Request(transaction).input("pid", sql.Int, productId).query(`
+      SELECT p.*, b.name AS brand_name, c.name AS category_name 
+      FROM Products p
+      LEFT JOIN Brands b ON p.brand_id = b.brand_id
+      LEFT JOIN Categories c ON p.category_id = c.category_id
+      WHERE p.product_id = @pid
+    `);
+    const variantsRes = await new sql.Request(transaction).input("pid", sql.Int, productId).query(`SELECT * FROM ProductVariants WHERE product_id = @pid`);
+    const imagesRes = await new sql.Request(transaction).input("pid", sql.Int, productId).query(`SELECT * FROM ProductImages WHERE product_id = @pid`);
+    const oldProduct = prodRes.recordset[0];
+
     const brandId = await getOrCreateByName(transaction, "Brands", "brand_id", brand);
     const categoryId = await getOrCreateByName(transaction, "Categories", "category_id", category);
 
@@ -414,6 +426,34 @@ const updateAdminProduct = async (req, res) => {
 
     await transaction.commit();
 
+    await recordHistory({
+      actionType: "UPDATE",
+      entityType: "product",
+      title: `Cập nhật sản phẩm: ${name}`,
+      description: `Sản phẩm #${productId} (${name}) - Giá: ${Number(price).toLocaleString("vi-VN")}đ - Tồn kho: ${stock}`,
+      snapshotData: [{
+        product_id: productId,
+        previous: {
+          product: oldProduct,
+          variants: variantsRes.recordset,
+          images: imagesRes.recordset,
+        },
+        updated: {
+          name,
+          description,
+          price,
+          brand,
+          category,
+          stock,
+          sizes,
+          colors,
+          image,
+        },
+      }],
+      itemCount: 1,
+      createdBy: req.user?.name || req.user?.email || "Admin",
+    });
+
     uploadProductToS3(productId).catch(console.error);
     if (updatedImgId && rawImage) {
       syncSingleProductImage(productId, updatedImgId, rawImage).catch(console.error);
@@ -441,6 +481,37 @@ const deleteAdminProduct = async (req, res) => {
     }
 
     const pool = await poolPromise;
+
+    // Lưu snapshot vào DataHistory trước khi xóa để có thể khôi phục
+    const prodRes = await pool.request().input("pid", sql.Int, productId).query(`
+      SELECT p.*, b.name AS brand_name, c.name AS category_name 
+      FROM Products p
+      LEFT JOIN Brands b ON p.brand_id = b.brand_id
+      LEFT JOIN Categories c ON p.category_id = c.category_id
+      WHERE p.product_id = @pid
+    `);
+
+    if (prodRes.recordset.length > 0) {
+      const product = prodRes.recordset[0];
+      const variantsRes = await pool.request().input("pid", sql.Int, productId).query(`SELECT * FROM ProductVariants WHERE product_id = @pid`);
+      const imagesRes = await pool.request().input("pid", sql.Int, productId).query(`SELECT * FROM ProductImages WHERE product_id = @pid`);
+
+      const snapshot = [{
+        product: product,
+        variants: variantsRes.recordset,
+        images: imagesRes.recordset,
+      }];
+
+      await recordHistory({
+        actionType: "DELETE",
+        entityType: "product",
+        title: `Xóa sản phẩm "${product.name}"`,
+        description: `Xóa sản phẩm ${product.name} (Mã: #${productId})`,
+        snapshotData: snapshot,
+        itemCount: 1,
+        createdBy: req.user?.name || req.user?.email || "Admin",
+      });
+    }
 
     await pool
       .request()
@@ -471,6 +542,46 @@ const deleteAdminProductsBatch = async (req, res) => {
 
     const pool = await poolPromise;
     const cleanIds = ids.map(Number).filter((id) => !isNaN(id) && id > 0);
+
+    // Thu thập snapshot các sản phẩm trước khi xóa
+    const snapshots = [];
+    const productNames = [];
+
+    for (const pid of cleanIds) {
+      const prodRes = await pool.request().input("pid", sql.Int, pid).query(`
+        SELECT p.*, b.name AS brand_name, c.name AS category_name 
+        FROM Products p
+        LEFT JOIN Brands b ON p.brand_id = b.brand_id
+        LEFT JOIN Categories c ON p.category_id = c.category_id
+        WHERE p.product_id = @pid
+      `);
+
+      if (prodRes.recordset.length > 0) {
+        const product = prodRes.recordset[0];
+        productNames.push(product.name || `#${pid}`);
+        const variantsRes = await pool.request().input("pid", sql.Int, pid).query(`SELECT * FROM ProductVariants WHERE product_id = @pid`);
+        const imagesRes = await pool.request().input("pid", sql.Int, pid).query(`SELECT * FROM ProductImages WHERE product_id = @pid`);
+
+        snapshots.push({
+          product: product,
+          variants: variantsRes.recordset,
+          images: imagesRes.recordset,
+        });
+      }
+    }
+
+    if (snapshots.length > 0) {
+      const namesPreview = productNames.slice(0, 4).join(", ") + (productNames.length > 4 ? `, +${productNames.length - 4} sản phẩm khác` : "");
+      await recordHistory({
+        actionType: "BATCH_DELETE",
+        entityType: "product",
+        title: `Xóa ${snapshots.length} sản phẩm`,
+        description: `Xóa ${snapshots.length} sản phẩm: ${namesPreview}`,
+        snapshotData: snapshots,
+        itemCount: snapshots.length,
+        createdBy: req.user?.name || req.user?.email || "Admin",
+      });
+    }
 
     for (const pid of cleanIds) {
       await pool.request().input("pid", sql.Int, pid).query(`

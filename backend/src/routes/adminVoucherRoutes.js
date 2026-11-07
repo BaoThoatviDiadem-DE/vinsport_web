@@ -8,6 +8,7 @@ const {
   seedDefaultVouchers,
   TABLE_VOUCHERS,
 } = require("../utils/dynamoService");
+const { recordHistory } = require("../utils/historyService");
 const { verifyToken } = require("../middlewares/authMiddleware");
 
 // Middleware xác thực quyền Quản trị viên (Admin)
@@ -171,6 +172,20 @@ router.put("/:code", verifyToken, requireAdmin, async (req, res) => {
       expiresAt: expiresAt !== undefined ? expiresAt : existing.expiresAt,
     });
 
+    await recordHistory({
+      actionType: "UPDATE",
+      entityType: "voucher",
+      title: `Cập nhật mã ưu đãi: ${cleanCode}`,
+      description: `Mã "${cleanCode}": Giảm ${updated.discountValue}${updated.discountType === "percent" ? "%" : "đ"} cho đơn từ ${Number(updated.minOrderAmount || 0).toLocaleString("vi-VN")}đ`,
+      snapshotData: [{
+        code: cleanCode,
+        previous: existing,
+        updated,
+      }],
+      itemCount: 1,
+      createdBy: req.user?.name || req.user?.email || "Admin",
+    });
+
     return res.json({
       success: true,
       message: `Cập nhật mã ưu đãi "${cleanCode}" thành công!`,
@@ -202,6 +217,17 @@ router.delete("/:code", verifyToken, requireAdmin, async (req, res) => {
       });
     }
 
+    // Ghi lại snapshot vào DataHistory trước khi xóa
+    await recordHistory({
+      actionType: "DELETE",
+      entityType: "voucher",
+      title: `Xóa mã ưu đãi "${cleanCode}"`,
+      description: `Xóa mã ưu đãi ${cleanCode} (${existing.description || existing.discountType || "Ưu đãi"})`,
+      snapshotData: [existing],
+      itemCount: 1,
+      createdBy: req.user?.name || req.user?.email || "Admin",
+    });
+
     await deleteVoucher(cleanCode);
 
     return res.json({
@@ -232,6 +258,27 @@ router.post("/batch-delete", verifyToken, requireAdmin, async (req, res) => {
     }
 
     const cleanCodes = codes.map((c) => String(c).trim().toUpperCase());
+
+    // Thu thập snapshot các mã ưu đãi trước khi xóa
+    const snapshots = [];
+    for (const c of cleanCodes) {
+      const v = await getVoucherByCode(c);
+      if (v) snapshots.push(v);
+    }
+
+    if (snapshots.length > 0) {
+      const preview = cleanCodes.slice(0, 4).join(", ") + (cleanCodes.length > 4 ? `, +${cleanCodes.length - 4} mã khác` : "");
+      await recordHistory({
+        actionType: "BATCH_DELETE",
+        entityType: "voucher",
+        title: `Xóa ${snapshots.length} mã ưu đãi`,
+        description: `Xóa ${snapshots.length} mã ưu đãi: ${preview}`,
+        snapshotData: snapshots,
+        itemCount: snapshots.length,
+        createdBy: req.user?.name || req.user?.email || "Admin",
+      });
+    }
+
     await Promise.all(cleanCodes.map((c) => deleteVoucher(c)));
 
     return res.json({

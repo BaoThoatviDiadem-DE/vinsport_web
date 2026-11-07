@@ -9,6 +9,7 @@ import {
   Users,
   ClipboardList,
   Ticket,
+  History,
   ShoppingCart,
   User,
   LogOut,
@@ -131,6 +132,11 @@ export const Navbar = () => {
       name: "Mã ưu đãi",
       path: "/admin/vouchers",
       icon: Ticket,
+    },
+    {
+      name: "Lịch sử dữ liệu",
+      path: "/admin/history",
+      icon: History,
     },
   ];
 

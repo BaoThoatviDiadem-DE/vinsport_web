@@ -2,6 +2,7 @@ const { sql, poolPromise } = require("../db");
 const { uploadOrderToS3 } = require("../utils/s3Service");
 const { sendOrderEmail } = require("../utils/emailService");
 const { sendOrderToQueue } = require("../utils/sqsService");
+const { recordHistory } = require("../utils/historyService");
 
 function normalizePaymentMethod(value) {
   const method = String(value || "").toLowerCase();
@@ -107,6 +108,20 @@ const getAdminOrders = async (req, res) => {
   }
 };
 
+const orderStatusLabelMap = {
+  pending: "Chờ xử lý",
+  confirmed: "Đã xác nhận",
+  shipping: "Đang giao",
+  completed: "Hoàn thành",
+  cancelled: "Đã hủy",
+};
+
+const paymentStatusLabelMap = {
+  pending: "Chờ xác nhận",
+  paid: "Đã thanh toán",
+  failed: "Thất bại",
+};
+
 const updateAdminOrder = async (req, res) => {
   const pool = await poolPromise;
   const transaction = new sql.Transaction(pool);
@@ -133,15 +148,38 @@ const updateAdminOrder = async (req, res) => {
     const orderCheck = await new sql.Request(transaction)
       .input("orderId", sql.Int, orderId)
       .query(`
-        SELECT TOP 1 order_id
-        FROM Orders
-        WHERE order_id = @orderId
+        SELECT TOP 1
+          o.order_id,
+          o.status AS order_status,
+          o.total_amount,
+          u.name AS customer_name,
+          pay.payment_id,
+          pay.status AS payment_status,
+          pay.method AS payment_method
+        FROM Orders o
+        LEFT JOIN Users u ON o.user_id = u.user_id
+        OUTER APPLY (
+          SELECT TOP 1 payment_id, method, status
+          FROM Payments
+          WHERE order_id = o.order_id
+          ORDER BY payment_id DESC
+        ) pay
+        WHERE o.order_id = @orderId
       `);
 
     if (orderCheck.recordset.length === 0) {
       await transaction.rollback();
       return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
     }
+
+    const currentOrder = orderCheck.recordset[0];
+    const oldOrderStatus = normalizeOrderStatus(currentOrder.order_status);
+    const oldPaymentStatus = normalizePaymentStatus(currentOrder.payment_status);
+    const oldPaymentMethod = normalizePaymentMethod(currentOrder.payment_method);
+
+    const hasOrderStatusChanged = oldOrderStatus !== normalizedOrderStatus;
+    const hasPaymentStatusChanged = oldPaymentStatus !== normalizedPaymentStatus;
+    const hasPaymentMethodChanged = oldPaymentMethod !== normalizePaymentMethod(paymentMethod);
 
     await new sql.Request(transaction)
       .input("orderId", sql.Int, orderId)
@@ -152,20 +190,9 @@ const updateAdminOrder = async (req, res) => {
         WHERE order_id = @orderId
       `);
 
-    const paymentCheck = await new sql.Request(transaction)
-      .input("orderId", sql.Int, orderId)
-      .query(`
-        SELECT TOP 1 payment_id
-        FROM Payments
-        WHERE order_id = @orderId
-        ORDER BY payment_id DESC
-      `);
-
-    if (paymentCheck.recordset.length > 0) {
-      const paymentId = paymentCheck.recordset[0].payment_id;
-
+    if (currentOrder.payment_id) {
       await new sql.Request(transaction)
-        .input("paymentId", sql.Int, paymentId)
+        .input("paymentId", sql.Int, currentOrder.payment_id)
         .input("status", sql.NVarChar(50), toDbPaymentStatus(normalizedPaymentStatus))
         .query(`
           UPDATE Payments
@@ -184,6 +211,52 @@ const updateAdminOrder = async (req, res) => {
     }
 
     await transaction.commit();
+    started = false;
+
+    // Ghi lại lịch sử thay đổi nếu có cập nhật trạng thái đơn hàng hoặc thanh toán
+    if (hasOrderStatusChanged || hasPaymentStatusChanged || hasPaymentMethodChanged) {
+      const changes = [];
+      if (hasOrderStatusChanged) {
+        changes.push(`TT đơn: ${orderStatusLabelMap[oldOrderStatus] || oldOrderStatus} ➔ ${orderStatusLabelMap[normalizedOrderStatus] || normalizedOrderStatus}`);
+      }
+      if (hasPaymentStatusChanged) {
+        changes.push(`TT thanh toán: ${paymentStatusLabelMap[oldPaymentStatus] || oldPaymentStatus} ➔ ${paymentStatusLabelMap[normalizedPaymentStatus] || normalizedPaymentStatus}`);
+      }
+      if (hasPaymentMethodChanged) {
+        changes.push(`Hình thức: ${oldPaymentMethod} ➔ ${normalizePaymentMethod(paymentMethod)}`);
+      }
+
+      const custName = currentOrder.customer_name || "Khách hàng";
+      const title = `Cập nhật đơn hàng #${orderId} (${custName})`;
+      const description = `Đơn #${orderId} (${custName}) - Tổng tiền: ${Number(currentOrder.total_amount || 0).toLocaleString("vi-VN")}đ. Thay đổi: ${changes.join(", ")}`;
+
+      const snapshotData = [{
+        order_id: orderId,
+        customer_name: custName,
+        total_amount: currentOrder.total_amount,
+        previous: {
+          order_status: toDbOrderStatus(oldOrderStatus),
+          payment_status: toDbPaymentStatus(oldPaymentStatus),
+          payment_method: toDbPaymentMethod(oldPaymentMethod),
+        },
+        updated: {
+          order_status: toDbOrderStatus(normalizedOrderStatus),
+          payment_status: toDbPaymentStatus(normalizedPaymentStatus),
+          payment_method: toDbPaymentMethod(paymentMethod),
+        },
+        changes,
+      }];
+
+      await recordHistory({
+        actionType: "UPDATE",
+        entityType: "order",
+        title,
+        description,
+        snapshotData,
+        itemCount: 1,
+        createdBy: req.user?.name || req.user?.email || "Admin",
+      });
+    }
 
     sendOrderToQueue(orderId, "STATUS_UPDATED");
 
@@ -226,14 +299,32 @@ const updateAdminOrderStatus = async (req, res) => {
       .request()
       .input("orderId", sql.Int, orderId)
       .query(`
-        SELECT TOP 1 order_id
-        FROM Orders
-        WHERE order_id = @orderId
+        SELECT TOP 1
+          o.order_id,
+          o.status AS order_status,
+          o.total_amount,
+          u.name AS customer_name,
+          pay.payment_id,
+          pay.status AS payment_status,
+          pay.method AS payment_method
+        FROM Orders o
+        LEFT JOIN Users u ON o.user_id = u.user_id
+        OUTER APPLY (
+          SELECT TOP 1 payment_id, method, status
+          FROM Payments
+          WHERE order_id = o.order_id
+          ORDER BY payment_id DESC
+        ) pay
+        WHERE o.order_id = @orderId
       `);
 
     if (existed.recordset.length === 0) {
       return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
     }
+
+    const currentOrder = existed.recordset[0];
+    const oldOrderStatus = normalizeOrderStatus(currentOrder.order_status);
+    const hasOrderStatusChanged = oldOrderStatus !== normalizedStatus;
 
     await pool
       .request()
@@ -244,6 +335,36 @@ const updateAdminOrderStatus = async (req, res) => {
         SET status = @status
         WHERE order_id = @orderId
       `);
+
+    if (hasOrderStatusChanged) {
+      const custName = currentOrder.customer_name || "Khách hàng";
+      const oldLabel = orderStatusLabelMap[oldOrderStatus] || oldOrderStatus;
+      const newLabel = orderStatusLabelMap[normalizedStatus] || normalizedStatus;
+      const title = `Cập nhật TT đơn hàng #${orderId} (${custName})`;
+      const description = `Đơn #${orderId} (${custName}): TT đơn hàng đổi từ "${oldLabel}" ➔ "${newLabel}"`;
+
+      const snapshotData = [{
+        order_id: orderId,
+        customer_name: custName,
+        total_amount: currentOrder.total_amount,
+        previous: {
+          order_status: toDbOrderStatus(oldOrderStatus),
+        },
+        updated: {
+          order_status: toDbOrderStatus(normalizedStatus),
+        },
+      }];
+
+      await recordHistory({
+        actionType: "UPDATE",
+        entityType: "order",
+        title,
+        description,
+        snapshotData,
+        itemCount: 1,
+        createdBy: req.user?.name || req.user?.email || "Admin",
+      });
+    }
 
     sendOrderToQueue(orderId, "STATUS_UPDATED");
 
@@ -279,18 +400,37 @@ const updateAdminPaymentStatus = async (req, res) => {
       .request()
       .input("orderId", sql.Int, orderId)
       .query(`
-        SELECT TOP 1 payment_id
-        FROM Payments
-        WHERE order_id = @orderId
-        ORDER BY payment_id DESC
+        SELECT TOP 1
+          o.order_id,
+          o.status AS order_status,
+          o.total_amount,
+          u.name AS customer_name,
+          pay.payment_id,
+          pay.status AS payment_status,
+          pay.method AS payment_method
+        FROM Orders o
+        LEFT JOIN Users u ON o.user_id = u.user_id
+        OUTER APPLY (
+          SELECT TOP 1 payment_id, method, status
+          FROM Payments
+          WHERE order_id = o.order_id
+          ORDER BY payment_id DESC
+        ) pay
+        WHERE o.order_id = @orderId
       `);
 
-    if (existed.recordset.length > 0) {
-      const paymentId = existed.recordset[0].payment_id;
+    if (existed.recordset.length === 0) {
+      return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
+    }
 
+    const currentOrder = existed.recordset[0];
+    const oldPaymentStatus = normalizePaymentStatus(currentOrder.payment_status);
+    const hasPaymentStatusChanged = oldPaymentStatus !== normalizedStatus;
+
+    if (currentOrder.payment_id) {
       await pool
         .request()
-        .input("paymentId", sql.Int, paymentId)
+        .input("paymentId", sql.Int, currentOrder.payment_id)
         .input("status", sql.NVarChar(50), toDbPaymentStatus(normalizedStatus))
         .query(`
           UPDATE Payments
@@ -307,6 +447,36 @@ const updateAdminPaymentStatus = async (req, res) => {
           INSERT INTO Payments (order_id, method, status)
           VALUES (@orderId, @method, @status)
         `);
+    }
+
+    if (hasPaymentStatusChanged) {
+      const custName = currentOrder.customer_name || "Khách hàng";
+      const oldLabel = paymentStatusLabelMap[oldPaymentStatus] || oldPaymentStatus;
+      const newLabel = paymentStatusLabelMap[normalizedStatus] || normalizedStatus;
+      const title = `Cập nhật TT thanh toán đơn #${orderId} (${custName})`;
+      const description = `Đơn #${orderId} (${custName}): TT thanh toán đổi từ "${oldLabel}" ➔ "${newLabel}"`;
+
+      const snapshotData = [{
+        order_id: orderId,
+        customer_name: custName,
+        total_amount: currentOrder.total_amount,
+        previous: {
+          payment_status: toDbPaymentStatus(oldPaymentStatus),
+        },
+        updated: {
+          payment_status: toDbPaymentStatus(normalizedStatus),
+        },
+      }];
+
+      await recordHistory({
+        actionType: "UPDATE",
+        entityType: "order",
+        title,
+        description,
+        snapshotData,
+        itemCount: 1,
+        createdBy: req.user?.name || req.user?.email || "Admin",
+      });
     }
 
     sendOrderToQueue(orderId, "STATUS_UPDATED");
@@ -335,8 +505,43 @@ const deleteAdminOrder = async (req, res) => {
     }
 
     const pool = await poolPromise;
+
+    // Lưu snapshot đơn hàng trước khi xóa để có thể khôi phục
+    const orderRes = await pool.request().input("oid", sql.Int, orderId).query(`
+      SELECT o.*, u.name AS customer_name, u.phone AS customer_phone, u.email AS customer_email
+      FROM Orders o
+      LEFT JOIN Users u ON o.user_id = u.user_id
+      WHERE o.order_id = @oid
+    `);
+
+    if (orderRes.recordset.length > 0) {
+      const order = orderRes.recordset[0];
+      const detailsRes = await pool.request().input("oid", sql.Int, orderId).query("SELECT * FROM OrderDetails WHERE order_id = @oid");
+      const paymentsRes = await pool.request().input("oid", sql.Int, orderId).query("SELECT * FROM Payments WHERE order_id = @oid");
+      const shippingRes = await pool.request().input("oid", sql.Int, orderId).query("SELECT * FROM Shipping WHERE order_id = @oid");
+
+      const snapshot = [{
+        order,
+        details: detailsRes.recordset,
+        payments: paymentsRes.recordset,
+        shipping: shippingRes.recordset,
+        customerName: order.customer_name,
+      }];
+
+      await recordHistory({
+        actionType: "DELETE",
+        entityType: "order",
+        title: `Xóa đơn hàng #${orderId}`,
+        description: `Xóa đơn hàng #${orderId} của khách hàng ${order.customer_name || "Khách"} (${Number(order.total_amount || 0).toLocaleString("vi-VN")} đ)`,
+        snapshotData: snapshot,
+        itemCount: 1,
+        createdBy: req.user?.name || req.user?.email || "Admin",
+      });
+    }
+
     await pool.request().input("oid", sql.Int, orderId).query(`
       DELETE FROM Payments WHERE order_id = @oid;
+      DELETE FROM Shipping WHERE order_id = @oid;
       DELETE FROM OrderDetails WHERE order_id = @oid;
       DELETE FROM Orders WHERE order_id = @oid;
     `);
@@ -358,9 +563,52 @@ const deleteAdminOrdersBatch = async (req, res) => {
     const pool = await poolPromise;
     const cleanIds = ids.map(Number).filter((id) => !isNaN(id) && id > 0);
 
+    // Thu thập snapshot các đơn hàng trước khi xóa
+    const snapshots = [];
+    const orderCodes = [];
+
+    for (const oid of cleanIds) {
+      const orderRes = await pool.request().input("oid", sql.Int, oid).query(`
+        SELECT o.*, u.name AS customer_name, u.phone AS customer_phone, u.email AS customer_email
+        FROM Orders o
+        LEFT JOIN Users u ON o.user_id = u.user_id
+        WHERE o.order_id = @oid
+      `);
+
+      if (orderRes.recordset.length > 0) {
+        const order = orderRes.recordset[0];
+        orderCodes.push(`#${oid} (${order.customer_name || "Khách"})`);
+        const detailsRes = await pool.request().input("oid", sql.Int, oid).query("SELECT * FROM OrderDetails WHERE order_id = @oid");
+        const paymentsRes = await pool.request().input("oid", sql.Int, oid).query("SELECT * FROM Payments WHERE order_id = @oid");
+        const shippingRes = await pool.request().input("oid", sql.Int, oid).query("SELECT * FROM Shipping WHERE order_id = @oid");
+
+        snapshots.push({
+          order,
+          details: detailsRes.recordset,
+          payments: paymentsRes.recordset,
+          shipping: shippingRes.recordset,
+          customerName: order.customer_name,
+        });
+      }
+    }
+
+    if (snapshots.length > 0) {
+      const preview = orderCodes.slice(0, 3).join(", ") + (orderCodes.length > 3 ? `, +${orderCodes.length - 3} đơn khác` : "");
+      await recordHistory({
+        actionType: "BATCH_DELETE",
+        entityType: "order",
+        title: `Xóa ${snapshots.length} đơn hàng`,
+        description: `Xóa ${snapshots.length} đơn hàng: ${preview}`,
+        snapshotData: snapshots,
+        itemCount: snapshots.length,
+        createdBy: req.user?.name || req.user?.email || "Admin",
+      });
+    }
+
     for (const oid of cleanIds) {
       await pool.request().input("oid", sql.Int, oid).query(`
         DELETE FROM Payments WHERE order_id = @oid;
+        DELETE FROM Shipping WHERE order_id = @oid;
         DELETE FROM OrderDetails WHERE order_id = @oid;
         DELETE FROM Orders WHERE order_id = @oid;
       `);

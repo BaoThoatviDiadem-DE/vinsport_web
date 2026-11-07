@@ -18,11 +18,12 @@ const REGION = (process.env.AWS_REGION || "ap-southeast-1").trim();
 const ACCESS_KEY = (process.env.AWS_ACCESS_KEY_ID || "").trim();
 const SECRET_KEY = (process.env.AWS_SECRET_ACCESS_KEY || "").trim();
 
-// Tên 4 bảng DynamoDB
+// Tên các bảng DynamoDB
 const TABLE_RECENTLY_VIEWED = (process.env.DYNAMODB_TABLE_RECENTLY_VIEWED || "VinSport_RecentlyViewed").trim();
 const TABLE_CARTS = (process.env.DYNAMODB_TABLE_CARTS || "VinSport_Carts").trim();
 const TABLE_OTP = (process.env.DYNAMODB_TABLE_OTP || "VinSport_OTP").trim();
 const TABLE_VOUCHERS = (process.env.DYNAMODB_TABLE_VOUCHERS || "VinSport_Vouchers").trim();
+const TABLE_DATA_HISTORY = (process.env.DYNAMODB_TABLE_DATA_HISTORY || "VinSport_DataHistory").trim();
 
 let docClient = null;
 
@@ -46,6 +47,7 @@ function getDocClient() {
     marshallOptions: {
       removeUndefinedValues: true,
       convertEmptyValues: true,
+      convertClassInstanceToMap: true,
     },
   });
 
@@ -124,6 +126,7 @@ async function ensureAllDynamoTables() {
       ensureTable(TABLE_CARTS, "userId"),
       ensureTable(TABLE_OTP, "identifier"),
       ensureTable(TABLE_VOUCHERS, "code"),
+      ensureTable(TABLE_DATA_HISTORY, "id"),
     ]);
 
     // Bật TTL cho bảng OTP
@@ -702,4 +705,6 @@ module.exports = {
   TABLE_CARTS,
   TABLE_OTP,
   TABLE_VOUCHERS,
+  TABLE_DATA_HISTORY,
+  getDocClient,
 };
