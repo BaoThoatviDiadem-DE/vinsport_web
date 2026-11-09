@@ -8,20 +8,9 @@ const {
 } = require("@aws-sdk/client-sns");
 
 const region = (process.env.AWS_REGION || "ap-southeast-1").trim();
-const accessKeyId = (process.env.AWS_ACCESS_KEY_ID || "").trim();
-const secretAccessKey = (process.env.AWS_SECRET_ACCESS_KEY || "").trim();
-
-if (!accessKeyId || !secretAccessKey) {
-  console.error("❌ [LỖI] Chưa tìm thấy AWS_ACCESS_KEY_ID hoặc AWS_SECRET_ACCESS_KEY trong file backend/.env!");
-  process.exit(1);
-}
 
 const snsClient = new SNSClient({
   region,
-  credentials: {
-    accessKeyId,
-    secretAccessKey,
-  },
 });
 
 async function main() {

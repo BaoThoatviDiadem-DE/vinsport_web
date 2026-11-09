@@ -3,7 +3,6 @@ const {
   InvokeCommand,
   ListFunctionsCommand,
 } = require("@aws-sdk/client-lambda");
-const path = require("path");
 const { getVoucherByCode } = require("./dynamoService");
 
 // Tên hàm Lambda mặc định
@@ -16,15 +15,9 @@ let lambdaClient = null;
 
 function getLambdaClient() {
   if (!lambdaClient) {
-    if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
-      lambdaClient = new LambdaClient({
-        region: AWS_REGION,
-        credentials: {
-          accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-        },
-      });
-    }
+    lambdaClient = new LambdaClient({
+      region: AWS_REGION,
+    });
   }
   return lambdaClient;
 }
@@ -177,23 +170,23 @@ async function checkLambdaHealth() {
   let cloudFunctions = [];
   let isAwsConnected = false;
 
-  if (client) {
-    try {
-      const listRes = await client.send(new ListFunctionsCommand({ MaxItems: 10 }));
-      isAwsConnected = true;
-      cloudFunctions = (listRes.Functions || []).map((f) => ({
-        functionName: f.FunctionName,
-        runtime: f.Runtime,
-        handler: f.Handler,
-        lastModified: f.LastModified,
-        codeSize: f.CodeSize,
-      }));
-    } catch (e) {
-      console.warn("[AWS Lambda ListFunctions check]:", e.message);
-    }
+  try {
+    const listRes = await client.send(
+      new ListFunctionsCommand({ MaxItems: 10 })
+    );
+
+    isAwsConnected = true;
+    cloudFunctions = (listRes.Functions || []).map((f) => ({
+      functionName: f.FunctionName,
+      runtime: f.Runtime,
+      handler: f.Handler,
+      lastModified: f.LastModified,
+      codeSize: f.CodeSize,
+    }));
+  } catch (e) {
+    console.warn("[AWS Lambda ListFunctions check]:", e.message);
   }
 
-  // Gọi test hàm ping
   const pingResult = await invokeServerlessEngine("SYSTEM_PING");
 
   return {
@@ -204,7 +197,6 @@ async function checkLambdaHealth() {
     pingResult,
   };
 }
-
 module.exports = {
   calculatePromotion,
   processOrderServerless,

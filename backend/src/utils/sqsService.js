@@ -4,7 +4,6 @@ const {
   ReceiveMessageCommand,
   DeleteMessageCommand,
   GetQueueUrlCommand,
-  CreateQueueCommand,
 } = require("@aws-sdk/client-sqs");
 
 const { uploadOrderToS3 } = require("./s3Service");
@@ -14,10 +13,6 @@ const { sendTechnicalAlert } = require("./snsService");
 // Cấu hình SQS Client sử dụng thông tin AWS IAM từ file .env
 const sqsClient = new SQSClient({
   region: (process.env.AWS_REGION || "ap-southeast-1").trim(),
-  credentials: {
-    accessKeyId: (process.env.AWS_ACCESS_KEY_ID || "").trim(),
-    secretAccessKey: (process.env.AWS_SECRET_ACCESS_KEY || "").trim(),
-  },
 });
 
 const QUEUE_NAME = (process.env.AWS_SQS_QUEUE_NAME || "vinsport-order-queue").trim();
@@ -33,41 +28,17 @@ let sqsAccessDeniedNotified = false;
 async function getOrCreateQueueUrl() {
   if (cachedQueueUrl) return cachedQueueUrl;
 
-  try {
-    // 1. Thử lấy URL queue nếu đã tồn tại
-    const getRes = await sqsClient.send(
-      new GetQueueUrlCommand({
-        QueueName: QUEUE_NAME,
-      })
-    );
-    cachedQueueUrl = getRes.QueueUrl;
-    console.log(`[AWS SQS] Đã kết nối Queue thành công: ${cachedQueueUrl}`);
-    return cachedQueueUrl;
-  } catch (err) {
-    if (err.name === "QueueDoesNotExist" || err.message?.includes("NonExistentQueue")) {
-      // 2. Nếu chưa tồn tại, tự động tạo mới
-      try {
-        console.log(`[AWS SQS] Queue ${QUEUE_NAME} chưa tồn tại. Đang tự động tạo...`);
-        const createRes = await sqsClient.send(
-          new CreateQueueCommand({
-            QueueName: QUEUE_NAME,
-            Attributes: {
-              VisibilityTimeout: "60", // 60 giây để worker xử lý xong (gửi mail + S3)
-              MessageRetentionPeriod: "345600", // Giữ tin nhắn 4 ngày
-            },
-          })
-        );
-        cachedQueueUrl = createRes.QueueUrl;
-        console.log(`[AWS SQS] Đã tạo mới SQS Queue thành công: ${cachedQueueUrl}`);
-        return cachedQueueUrl;
-      } catch (createErr) {
-        throw createErr;
-      }
-    }
-    throw err;
-  }
-}
+  const res = await sqsClient.send(
+    new GetQueueUrlCommand({
+      QueueName: QUEUE_NAME,
+    })
+  );
 
+  cachedQueueUrl = res.QueueUrl;
+  console.log(`[AWS SQS] Connected to existing Queue: ${cachedQueueUrl}`);
+
+  return cachedQueueUrl;
+}
 /**
  * Xử lý tác vụ đơn hàng (Gửi email khách hàng + Đồng bộ S3 Data Lakehouse)
  */

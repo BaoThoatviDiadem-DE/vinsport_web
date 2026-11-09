@@ -1,49 +1,20 @@
 const {
   SNSClient,
   PublishCommand,
-  CreateTopicCommand,
-  SetTopicAttributesCommand,
 } = require("@aws-sdk/client-sns");
 
 const snsClient = new SNSClient({
   region: (process.env.AWS_REGION || "ap-southeast-1").trim(),
-  credentials: {
-    accessKeyId: (process.env.AWS_ACCESS_KEY_ID || "").trim(),
-    secretAccessKey: (process.env.AWS_SECRET_ACCESS_KEY || "").trim(),
-  },
 });
 
-const DEFAULT_TOPIC_ARN = (process.env.AWS_SNS_TOPIC_ARN || "").trim();
-
-let cachedTopicArn = DEFAULT_TOPIC_ARN || null;
+const ALERT_TOPIC_ARN = (process.env.AWS_SNS_ALERT_TOPIC_ARN || process.env.AWS_SNS_TOPIC_ARN || "").trim();
 
 // Bộ nhớ đệm chống bão cảnh báo (Chống gửi hàng trăm email nếu lỗi lặp liên tục)
 const alertCooldowns = new Map();
 const alertCounts = new Map();
 const COOLDOWN_MS = 5 * 60 * 1000; // 5 phút
 
-/**
- * Lấy hoặc tạo SNS Topic cho cảnh báo kỹ thuật
- */
-async function getOrCreateAlertTopicArn() {
-  if (cachedTopicArn) return cachedTopicArn;
 
-  try {
-    const res = await snsClient.send(
-      new CreateTopicCommand({
-        Name: "vinsport-system-alerts",
-        Attributes: {
-          DisplayName: "VinSport Alerts",
-        },
-      })
-    );
-    cachedTopicArn = res.TopicArn;
-    return cachedTopicArn;
-  } catch (err) {
-    console.warn("[AWS SNS] Không thể lấy Topic ARN, dùng fallback:", err.message);
-    return DEFAULT_TOPIC_ARN;
-  }
-}
 
 /**
  * Gửi cảnh báo lỗi kỹ thuật hệ thống tới Quản trị viên qua Amazon SNS
@@ -63,9 +34,6 @@ async function sendTechnicalAlert({
   req = null,
   context = null,
 } = {}) {
-  if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
-    return;
-  }
 
   // Khóa nhận diện sự cố để chống bão thông báo (Rate Limiting)
   const alertKey = `${level}:${title}:${error?.message || ""}`;
@@ -87,7 +55,7 @@ async function sendTechnicalAlert({
   // Chạy nền không chặn luồng server
   setImmediate(async () => {
     try {
-      const topicArn = await getOrCreateAlertTopicArn();
+      const topicArn = ALERT_TOPIC_ARN;
       if (!topicArn) return;
 
       const timeStr = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
@@ -173,5 +141,4 @@ Recipient: ${process.env.EMAIL_USER || process.env.AWS_SNS_ADMIN_EMAIL || "Syste
 
 module.exports = {
   sendTechnicalAlert,
-  getOrCreateAlertTopicArn,
 };

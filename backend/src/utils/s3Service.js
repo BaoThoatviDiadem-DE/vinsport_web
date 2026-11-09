@@ -4,10 +4,6 @@ const { sql, poolPromise } = require("../db");
 // Cấu hình AWS S3 Client
 const s3Client = new S3Client({
   region: (process.env.AWS_REGION || "ap-southeast-1").trim(),
-  credentials: {
-    accessKeyId: (process.env.AWS_ACCESS_KEY_ID || "").trim(),
-    secretAccessKey: (process.env.AWS_SECRET_ACCESS_KEY || "").trim(),
-  },
 });
 
 const BUCKET_NAME = (process.env.AWS_BUCKET_NAME || "").trim();
@@ -17,8 +13,8 @@ const BUCKET_NAME = (process.env.AWS_BUCKET_NAME || "").trim();
  * Được gọi mỗi khi có đơn hàng mới (INSERT) hoặc cập nhật (UPDATE).
  */
 async function uploadOrderToS3(orderId) {
-  if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
-    console.log("[S3 Backup] Bỏ qua vì chưa cấu hình thông tin AWS_ACCESS_KEY_ID.");
+  if (!BUCKET_NAME) {
+    console.warn("[S3] Skipped: AWS_BUCKET_NAME is not configured.");
     return;
   }
 
@@ -98,7 +94,7 @@ async function uploadOrderToS3(orderId) {
 }
 
 async function uploadUserToS3(userId) {
-  if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) return;
+  if (!BUCKET_NAME) return;
   try {
     const pool = await poolPromise;
     const result = await pool.request()
@@ -124,7 +120,7 @@ async function uploadUserToS3(userId) {
 }
 
 async function uploadProductToS3(productId) {
-  if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) return;
+  if (!BUCKET_NAME) return;
   try {
     const pool = await poolPromise;
     const result = await pool.request()
@@ -150,7 +146,7 @@ async function uploadProductToS3(productId) {
 }
 
 async function deleteFromS3(type, id) {
-  if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) return;
+  if (!BUCKET_NAME) return;
   try {
     let folder = "";
     let prefix = "";
@@ -174,7 +170,7 @@ async function deleteFromS3(type, id) {
  * Tự động tải ảnh từ URL bên ngoài và lưu trữ lên Amazon S3 (images/products/), cập nhật lại DB
  */
 async function syncSingleProductImage(productId, imageId, imageUrl) {
-  if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) return;
+  if (!BUCKET_NAME) return;
   if (!imageUrl || (!imageUrl.startsWith("http://") && !imageUrl.startsWith("https://"))) return;
 
   const bucketName = (process.env.AWS_BUCKET_NAME || "").trim();

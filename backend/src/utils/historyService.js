@@ -1,7 +1,6 @@
 const {
   getDocClient,
   TABLE_DATA_HISTORY,
-  ensureAllDynamoTables,
   saveVoucher,
 } = require("./dynamoService");
 const {
@@ -13,16 +12,7 @@ const {
 } = require("@aws-sdk/lib-dynamodb");
 const { sql, poolPromise } = require("../db");
 
-/**
- * Đảm bảo bảng VinSport_DataHistory tồn tại trên Amazon DynamoDB
- */
-async function ensureHistoryTable() {
-  try {
-    await ensureAllDynamoTables();
-  } catch (err) {
-    console.error("[DataHistory] Lỗi khởi tạo bảng DynamoDB:", err.message);
-  }
-}
+
 
 /**
  * Ghi lại sự kiện thay đổi dữ liệu (Snapshot) vào AWS DynamoDB
@@ -716,7 +706,6 @@ async function deleteHistoryBatch(historyIds) {
 }
 
 module.exports = {
-  ensureHistoryTable,
   recordHistory,
   getHistoryList,
   restoreHistory,

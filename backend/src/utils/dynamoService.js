@@ -15,8 +15,6 @@ const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
 
 const REGION = (process.env.AWS_REGION || "ap-southeast-1").trim();
-const ACCESS_KEY = (process.env.AWS_ACCESS_KEY_ID || "").trim();
-const SECRET_KEY = (process.env.AWS_SECRET_ACCESS_KEY || "").trim();
 
 // Tên các bảng DynamoDB
 const TABLE_RECENTLY_VIEWED = (process.env.DYNAMODB_TABLE_RECENTLY_VIEWED || "VinSport_RecentlyViewed").trim();
@@ -30,18 +28,7 @@ let docClient = null;
 function getDocClient() {
   if (docClient) return docClient;
 
-  if (!ACCESS_KEY || !SECRET_KEY) {
-    console.warn("[DynamoDB] Bỏ qua vì chưa cấu hình AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY trong .env.");
-    return null;
-  }
-
-  const rawClient = new DynamoDBClient({
-    region: REGION,
-    credentials: {
-      accessKeyId: ACCESS_KEY,
-      secretAccessKey: SECRET_KEY,
-    },
-  });
+  const rawClient = new DynamoDBClient({ region: REGION });
 
   docClient = DynamoDBDocumentClient.from(rawClient, {
     marshallOptions: {
@@ -55,13 +42,7 @@ function getDocClient() {
 }
 
 function getRawClient() {
-  return new DynamoDBClient({
-    region: REGION,
-    credentials: {
-      accessKeyId: ACCESS_KEY,
-      secretAccessKey: SECRET_KEY,
-    },
-  });
+  return new DynamoDBClient({ region: REGION });
 }
 
 /**
@@ -119,7 +100,7 @@ async function enableTTL(tableName, attributeName = "expiresAt") {
  * Khởi tạo toàn bộ các bảng DynamoDB cần thiết cho VinSport
  */
 async function ensureAllDynamoTables() {
-  if (!ACCESS_KEY || !SECRET_KEY) return false;
+
   try {
     await Promise.all([
       ensureTable(TABLE_RECENTLY_VIEWED, "userId"),

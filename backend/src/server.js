@@ -20,7 +20,6 @@ const otpRoutes = require("./routes/otpRoutes");
 const lambdaRoutes = require("./routes/lambdaRoutes");
 const { sendTechnicalAlert } = require("./utils/snsService");
 const { startOrderWorker } = require("./utils/sqsService");
-const { ensureAllDynamoTables } = require("./utils/dynamoService");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -95,11 +94,6 @@ connectDB()
 
       // Khởi động AWS SQS Background Worker
       startOrderWorker();
-
-      // Tự động kiểm tra & khởi tạo tất cả các bảng Amazon DynamoDB
-      ensureAllDynamoTables().catch((err) => {
-        console.warn("[DynamoDB] Khởi tạo các bảng thất bại:", err.message);
-      });
     });
 
     server.on("error", (err) => {

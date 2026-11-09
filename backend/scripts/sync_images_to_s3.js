@@ -22,8 +22,6 @@ const { sql, poolPromise } = require("../src/db");
 // 1. Đọc cấu hình
 const BUCKET_NAME = (process.env.AWS_BUCKET_NAME || "").trim();
 const AWS_REGION = (process.env.AWS_REGION || "ap-southeast-1").trim();
-const ACCESS_KEY = (process.env.AWS_ACCESS_KEY_ID || "").trim();
-const SECRET_KEY = (process.env.AWS_SECRET_ACCESS_KEY || "").trim();
 
 // Kiểm tra tham số CLI --cloudfront nếu người dùng truyền trực tiếp
 let CLOUDFRONT_DOMAIN = (process.env.AWS_CLOUDFRONT_DOMAIN || "").trim();
@@ -33,11 +31,6 @@ if (cfArgIndex !== -1 && process.argv[cfArgIndex + 1]) {
 }
 CLOUDFRONT_DOMAIN = CLOUDFRONT_DOMAIN.replace(/^https?:\/\//i, "").replace(/\/$/, "");
 
-if (!ACCESS_KEY || !SECRET_KEY) {
-  console.error("❌ Lỗi: Chưa cấu hình AWS_ACCESS_KEY_ID hoặc AWS_SECRET_ACCESS_KEY trong file .env!");
-  process.exit(1);
-}
-
 if (!BUCKET_NAME) {
   console.error("❌ Lỗi: Chưa cấu hình AWS_BUCKET_NAME trong file .env!");
   process.exit(1);
@@ -45,10 +38,6 @@ if (!BUCKET_NAME) {
 
 const s3Client = new S3Client({
   region: AWS_REGION,
-  credentials: {
-    accessKeyId: ACCESS_KEY,
-    secretAccessKey: SECRET_KEY,
-  },
 });
 
 function getExtensionFromUrlOrType(url, contentType) {
