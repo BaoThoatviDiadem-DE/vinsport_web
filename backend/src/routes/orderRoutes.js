@@ -5,6 +5,8 @@ const { uploadOrderToS3, uploadUserToS3 } = require("../utils/s3Service");
 const { sendOrderEmail } = require("../utils/emailService");
 const { sendOrderToQueue } = require("../utils/sqsService");
 const { verifyToken } = require("../middlewares/authMiddleware");
+const { recordVoucherUsage } = require("../utils/dynamoService");
+const { isValidVietnamesePhone } = require("../utils/phoneValidator");
 
 function mapPaymentMethod(method) {
   const value = String(method || "").toLowerCase();
@@ -40,6 +42,12 @@ router.post("/orders", async (req, res) => {
     const phone = customer.phone ? String(customer.phone).trim() : "";
     const address = customer.address ? String(customer.address).trim() : "";
     const payment = mapPaymentMethod(paymentMethod);
+
+    if (!isValidVietnamesePhone(phone)) {
+      return res.status(400).json({
+        message: "Số điện thoại nhận hàng không hợp lệ! Vui lòng nhập đúng 10 số di động của nhà mạng Việt Nam (03x, 05x, 07x, 08x, 09x).",
+      });
+    }
 
     const authHeader = req.headers.authorization || "";
     let authUserId = null;
@@ -325,6 +333,14 @@ router.post("/orders", async (req, res) => {
     }
 
     await transaction.commit();
+
+    // Ghi nhận lượt sử dụng voucher cho tài khoản nếu đơn hàng có áp dụng voucher
+    const appliedVoucherCode = req.body?.voucherCode;
+    if (appliedVoucherCode && userId) {
+      recordVoucherUsage(appliedVoucherCode, userId).catch((err) => {
+        console.warn("[Voucher Usage Error]:", err.message);
+      });
+    }
 
     // Backup thông tin khách hàng lên Amazon S3 (nếu có thay đổi)
     uploadUserToS3(userId);

@@ -1,6 +1,7 @@
 const { sql, poolPromise } = require("../db");
 const { uploadUserToS3 } = require("../utils/s3Service");
 const { recordHistory } = require("../utils/historyService");
+const { isValidVietnamesePhone } = require("../utils/phoneValidator");
 
 const getAdminUsers = async (req, res) => {
   try {
@@ -77,6 +78,12 @@ const updateAdminUser = async (req, res) => {
 
     if (!["admin", "user"].includes(String(role))) {
       return res.status(400).json({ message: "Role không hợp lệ" });
+    }
+
+    if (String(phone).trim() && !isValidVietnamesePhone(phone)) {
+      return res.status(400).json({
+        message: "Số điện thoại không hợp lệ! Vui lòng nhập đúng 10 số di động của nhà mạng Việt Nam (03x, 05x, 07x, 08x, 09x).",
+      });
     }
 
     const pool = await poolPromise;

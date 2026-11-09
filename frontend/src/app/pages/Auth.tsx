@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import toast from "react-hot-toast";
+import { isValidVietnamesePhone } from "../utils/phoneValidator";
 
 export const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -57,6 +58,11 @@ export const Auth = () => {
         // Đăng nhập trực tiếp trên web VinSport
         await loginDirect(cleanEmail, password);
       } else {
+        if (phone.trim() && !isValidVietnamesePhone(phone)) {
+          toast.error("Số điện thoại không hợp lệ! Vui lòng nhập đúng 10 số di động của nhà mạng Việt Nam (03x, 05x, 07x, 08x, 09x).");
+          setIsSubmitting(false);
+          return;
+        }
         // Đăng ký tài khoản ngầm qua Cognito -> gửi mã xác thực về Gmail
         await registerDirect({ name: name.trim(), email: cleanEmail, password, phone: phone.trim() });
         toast.success("Mã xác thực OTP đã được gửi đến email của bạn!");

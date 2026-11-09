@@ -13,6 +13,8 @@ import { useCart } from "../contexts/CartContext";
 import { useAuth } from "../contexts/AuthContext";
 import { formatPrice } from "../data/mockData";
 import api from "../api/api";
+import toast from "react-hot-toast";
+import { isValidVietnamesePhone } from "../utils/phoneValidator";
 
 const BANK_INFO = {
   bankName: "TP Bank",
@@ -128,6 +130,22 @@ export const Checkout = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!formData.fullName.trim()) {
+      toast.error("Vui lòng nhập họ và tên người nhận!");
+      return;
+    }
+
+    if (!isValidVietnamesePhone(formData.phone)) {
+      toast.error("Số điện thoại không hợp lệ! Vui lòng nhập đúng 10 số di động của nhà mạng Việt Nam (03x, 05x, 07x, 08x, 09x).");
+      return;
+    }
+
+    if (!formData.address.trim()) {
+      toast.error("Vui lòng nhập địa chỉ nhận hàng!");
+      return;
+    }
+
     setIsProcessing(true);
 
     const snapshot = {

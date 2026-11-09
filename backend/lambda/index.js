@@ -18,6 +18,7 @@ const VOUCHER_DATABASE = {
     discountValue: 10,
     maxDiscount: 100000,
     minOrderAmount: 200000,
+    maxUsagePerUser: 1, // Số lần tối đa mỗi tài khoản được dùng
   },
   LAMBDA50K: {
     code: "LAMBDA50K",
@@ -26,6 +27,7 @@ const VOUCHER_DATABASE = {
     discountValue: 50000,
     maxDiscount: 50000,
     minOrderAmount: 300000,
+    maxUsagePerUser: 1, // Số lần tối đa mỗi tài khoản được dùng
   },
   FREESHIP: {
     code: "FREESHIP",
@@ -34,6 +36,7 @@ const VOUCHER_DATABASE = {
     discountValue: 30000,
     maxDiscount: 30000,
     minOrderAmount: 150000,
+    maxUsagePerUser: 1, // Số lần tối đa mỗi tài khoản được dùng
   },
   VIPSPORT: {
     code: "VIPSPORT",
@@ -42,6 +45,7 @@ const VOUCHER_DATABASE = {
     discountValue: 15,
     maxDiscount: 200000,
     minOrderAmount: 500000,
+    maxUsagePerUser: 1, // Số lần tối đa mỗi tài khoản được dùng
   },
 };
 
@@ -90,6 +94,19 @@ exports.handler = async (event, context) => {
               success: false,
               message: `Mã giảm giá "${cleanCode}" không tồn tại hoặc đã hết hạn.`,
             });
+          }
+
+          // Kiểm tra giới hạn số lần sử dụng của mỗi tài khoản (Mặc định: 1 lần/tài khoản)
+          const maxPerUser = Number(voucher.maxUsagePerUser) > 0 ? Number(voucher.maxUsagePerUser) : 1;
+          if (userId) {
+            const cleanUid = String(userId).trim();
+            const usedCount = (voucher.usages && Number(voucher.usages[cleanUid])) || 0;
+            if (usedCount >= maxPerUser) {
+              return formatResponse(400, {
+                success: false,
+                message: `Bạn đã sử dụng hết số lần áp dụng mã "${cleanCode}" (tối đa ${maxPerUser} lần/tài khoản).`,
+              });
+            }
           }
 
           if (normalizedSubtotal < voucher.minOrderAmount) {

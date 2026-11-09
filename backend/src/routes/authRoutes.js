@@ -15,6 +15,7 @@ const {
 const { verifyToken } = require("../middlewares/authMiddleware");
 const { uploadUserToS3 } = require("../utils/s3Service");
 const { sendOtpEmail } = require("../utils/emailService");
+const { isValidVietnamesePhone } = require("../utils/phoneValidator");
 
 // Bộ nhớ tạm lưu trữ yêu cầu đổi email đang chờ xác thực mã OTP
 // key: userId (Number) -> value: { pendingEmail, otpCode, name, phone, address, expiresAt }
@@ -34,6 +35,19 @@ try {
   console.warn("Cảnh báo: Không thể khởi tạo CognitoJwtVerifier:", err.message);
 }
 
+// Danh sách email DUY NHẤT được hệ thống cấp quyền Quản trị viên (Admin Whitelist)
+// Mọi email khác khi đăng ký LUÔN LUÔN mặc định 100% là "user"
+const ADMIN_WHITELIST = [
+  "chuducnhatminhbongro@gmail.com",
+  "vinsport@gmail.com",
+  ...(process.env.ADMIN_EMAILS ? process.env.ADMIN_EMAILS.split(",").map((e) => e.trim().toLowerCase()) : []),
+];
+
+function isWhitelistedAdmin(email) {
+  if (!email) return false;
+  return ADMIN_WHITELIST.includes(String(email).trim().toLowerCase());
+}
+
 /**
  * Hàm đồng bộ tài khoản Cognito với cơ sở dữ liệu SQL Server
  * Nếu email đã có sẵn (ví dụ admin vinsport@gmail.com) -> Giữ nguyên quyền admin và liên kết cognito_sub
@@ -42,6 +56,7 @@ try {
 async function syncUserWithSQLServer({ cognitoSub, email, name, phone }) {
   const pool = await poolPromise;
   const cleanEmail = String(email || "").trim().toLowerCase();
+  const shouldBeAdmin = isWhitelistedAdmin(cleanEmail);
 
   // 1. Ưu tiên tìm theo cognito_sub
   let result = await pool
@@ -94,6 +109,8 @@ async function syncUserWithSQLServer({ cognitoSub, email, name, phone }) {
       const userPhone = phone ? String(phone).trim().slice(0, 15) : null;
       const passwordPlaceholder = crypto.randomBytes(48).toString("hex");
 
+      const userRole = shouldBeAdmin ? "admin" : "user";
+
       await pool
         .request()
         .input("name", sql.NVarChar(100), displayName)
@@ -101,7 +118,7 @@ async function syncUserWithSQLServer({ cognitoSub, email, name, phone }) {
         .input("password", sql.NVarChar(255), passwordPlaceholder)
         .input("phone", sql.NVarChar(15), userPhone)
         .input("cognito_sub", sql.NVarChar(100), cognitoSub)
-        .input("role", sql.NVarChar(20), "user")
+        .input("role", sql.NVarChar(20), userRole)
         .query(`
           INSERT INTO Users
             ([name], [email], [password], [phone], [address], [role], [cognito_sub])
@@ -122,8 +139,22 @@ async function syncUserWithSQLServer({ cognitoSub, email, name, phone }) {
         `);
 
       user = result.recordset[0];
-      console.log(`[SQL SERVER] Đã tạo tài khoản mới: ${cleanEmail}`);
+      console.log(`[SQL SERVER] Đã tạo tài khoản mới: ${cleanEmail} (Quyền: ${user?.role || userRole})`);
     }
+  }
+
+  // Nếu email thuộc danh sách admin whitelist nhưng trong CSDL chưa có quyền admin -> Tự động cập nhật
+  if (user && shouldBeAdmin && user.role !== "admin") {
+    await pool
+      .request()
+      .input("user_id", sql.Int, user.user_id)
+      .query(`
+        UPDATE Users
+        SET role = 'admin'
+        WHERE user_id = @user_id
+      `);
+    user.role = "admin";
+    console.log(`[SQL SERVER] Đã tự động cập nhật quyền Admin cho email whitelist: ${cleanEmail}`);
   }
 
   return user;
@@ -211,6 +242,12 @@ router.post("/auth/cognito-direct/register", async (req, res) => {
     if (!email || !password) {
       return res.status(400).json({
         message: "Vui lòng nhập đầy đủ Email và Mật khẩu.",
+      });
+    }
+
+    if (phone && !isValidVietnamesePhone(phone)) {
+      return res.status(400).json({
+        message: "Số điện thoại không hợp lệ! Vui lòng nhập đúng 10 số di động của nhà mạng Việt Nam (03x, 05x, 07x, 08x, 09x).",
       });
     }
 
@@ -603,6 +640,12 @@ router.put("/auth/profile", verifyToken, async (req, res) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(cleanEmail)) {
       return res.status(400).json({ message: "Định dạng email không hợp lệ" });
+    }
+
+    if (cleanPhone && !isValidVietnamesePhone(cleanPhone)) {
+      return res.status(400).json({
+        message: "Số điện thoại không hợp lệ! Vui lòng nhập đúng 10 số di động của nhà mạng Việt Nam (03x, 05x, 07x, 08x, 09x).",
+      });
     }
 
     const pool = await poolPromise;

@@ -257,7 +257,34 @@ function Start-Frontend {
 function Start-CloudflareTunnel {
     Write-Host "Creating Cloudflare Quick Tunnel..."
 
+    # Nạp lại PATH mới nhất từ Windows Registry (đảm bảo nhận diện ngay cloudflared vừa cài đặt)
+    try {
+        $machinePath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+        $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+        $env:PATH = "$machinePath;$userPath"
+    } catch {}
+
     $cloudflared = Get-Command cloudflared.exe -ErrorAction SilentlyContinue
+
+    if (-not $cloudflared) {
+        $candidatePaths = @(
+            "C:\Program Files (x86)\cloudflared\cloudflared.exe",
+            "C:\Program Files\cloudflared\cloudflared.exe",
+            (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\cloudflared.exe"),
+            (Join-Path $env:ProgramFiles "cloudflared\cloudflared.exe")
+        )
+
+        foreach ($cp in $candidatePaths) {
+            if ($cp -and (Test-Path $cp)) {
+                $cloudflared = [PSCustomObject]@{ Source = $cp }
+                $dir = Split-Path $cp -Parent
+                if ($env:PATH -notlike "*$dir*") {
+                    $env:PATH = "$dir;" + $env:PATH
+                }
+                break
+            }
+        }
+    }
 
     if (-not $cloudflared) {
         $cloudflared = Get-Command cloudflared -ErrorAction Stop

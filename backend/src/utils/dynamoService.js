@@ -471,6 +471,8 @@ const fallbackVouchersCache = new Map([
       discountValue: 10,
       maxDiscount: 100000,
       minOrderAmount: 200000,
+      maxUsagePerUser: 1,
+      usages: {},
       isActive: true,
       createdAt: "2024-01-01T00:00:00.000Z",
       updatedAt: new Date().toISOString(),
@@ -485,6 +487,8 @@ const fallbackVouchersCache = new Map([
       discountValue: 50000,
       maxDiscount: 50000,
       minOrderAmount: 300000,
+      maxUsagePerUser: 1,
+      usages: {},
       isActive: true,
       createdAt: "2024-01-01T00:00:00.000Z",
       updatedAt: new Date().toISOString(),
@@ -499,6 +503,8 @@ const fallbackVouchersCache = new Map([
       discountValue: 30000,
       maxDiscount: 30000,
       minOrderAmount: 150000,
+      maxUsagePerUser: 1,
+      usages: {},
       isActive: true,
       createdAt: "2024-01-01T00:00:00.000Z",
       updatedAt: new Date().toISOString(),
@@ -513,6 +519,8 @@ const fallbackVouchersCache = new Map([
       discountValue: 15,
       maxDiscount: 200000,
       minOrderAmount: 500000,
+      maxUsagePerUser: 1,
+      usages: {},
       isActive: true,
       createdAt: "2024-01-01T00:00:00.000Z",
       updatedAt: new Date().toISOString(),
@@ -603,6 +611,8 @@ async function saveVoucher(voucherData) {
     discountValue: Number(voucherData.discountValue) || 0,
     maxDiscount: Number(voucherData.maxDiscount) || 0,
     minOrderAmount: Number(voucherData.minOrderAmount) || 0,
+    maxUsagePerUser: Number(voucherData.maxUsagePerUser) > 0 ? Number(voucherData.maxUsagePerUser) : (existing?.maxUsagePerUser || 1),
+    usages: existing?.usages || voucherData.usages || {},
     isActive: voucherData.isActive !== false,
     expiresAt: voucherData.expiresAt || null,
     createdAt: existing?.createdAt || now,
@@ -659,6 +669,54 @@ async function deleteVoucher(code) {
 }
 
 /**
+ * Lấy số lần 1 tài khoản đã sử dụng voucher này
+ */
+async function getVoucherUsageForUser(code, userId) {
+  if (!code || !userId) return 0;
+  const cleanCode = String(code).trim().toUpperCase();
+  const cleanUserId = String(userId).trim();
+  const voucher = await getVoucherByCode(cleanCode);
+  if (!voucher || !voucher.usages) return 0;
+  return Number(voucher.usages[cleanUserId] || 0);
+}
+
+/**
+ * Ghi nhận 1 lượt sử dụng voucher cho tài khoản khi đặt hàng thành công
+ */
+async function recordVoucherUsage(code, userId) {
+  if (!code || !userId) return false;
+  const cleanCode = String(code).trim().toUpperCase();
+  const cleanUserId = String(userId).trim();
+
+  const voucher = await getVoucherByCode(cleanCode);
+  if (!voucher) return false;
+
+  const usages = voucher.usages || {};
+  usages[cleanUserId] = (Number(usages[cleanUserId]) || 0) + 1;
+  voucher.usages = usages;
+  voucher.updatedAt = new Date().toISOString();
+
+  fallbackVouchersCache.set(cleanCode, voucher);
+
+  const client = getDocClient();
+  if (client) {
+    try {
+      await client.send(
+        new PutCommand({
+          TableName: TABLE_VOUCHERS,
+          Item: voucher,
+        })
+      );
+      console.log(`[DynamoDB Vouchers] Đã ghi nhận sử dụng mã "${cleanCode}" cho tài khoản ${cleanUserId} (Lần thứ ${usages[cleanUserId]})`);
+    } catch (err) {
+      console.warn(`[DynamoDB Vouchers] Ghi nhận usage lên DynamoDB lỗi (${err.message}), đã lưu cục bộ.`);
+    }
+  }
+
+  return true;
+}
+
+/**
  * Tự động khởi tạo dữ liệu mẫu nếu bảng DynamoDB còn trống
  */
 async function seedDefaultVouchers() {
@@ -700,6 +758,8 @@ module.exports = {
   saveVoucher,
   deleteVoucher,
   seedDefaultVouchers,
+  getVoucherUsageForUser,
+  recordVoucherUsage,
   // Table names
   TABLE_RECENTLY_VIEWED,
   TABLE_CARTS,

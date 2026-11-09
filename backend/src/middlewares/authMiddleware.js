@@ -2,6 +2,19 @@
 const { CognitoJwtVerifier } = require("aws-jwt-verify");
 const { poolPromise, sql } = require("../db");
 
+// Danh sách email DUY NHẤT được hệ thống cấp quyền Quản trị viên (Admin Whitelist)
+// Mọi email khác khi đăng ký LUÔN LUÔN mặc định 100% là "user"
+const ADMIN_WHITELIST = [
+  "chuducnhatminhbongro@gmail.com",
+  "vinsport@gmail.com",
+  ...(process.env.ADMIN_EMAILS ? process.env.ADMIN_EMAILS.split(",").map((e) => e.trim().toLowerCase()) : []),
+];
+
+function isWhitelistedAdmin(email) {
+  if (!email) return false;
+  return ADMIN_WHITELIST.includes(String(email).trim().toLowerCase());
+}
+
 // Xác minh Access Token được cấp bởi Cognito
 const verifier = CognitoJwtVerifier.create({
   userPoolId: process.env.COGNITO_USER_POOL_ID,
@@ -62,6 +75,15 @@ const verifyToken = async (req, res, next) => {
         }
 
         const user = result.recordset[0];
+
+        if (user && isWhitelistedAdmin(user.email) && user.role !== "admin") {
+          user.role = "admin";
+          pool.request()
+            .input("uid", sql.Int, user.user_id)
+            .query("UPDATE Users SET role = 'admin' WHERE user_id = @uid")
+            .catch(() => {});
+        }
+
         req.user = {
           user_id: user.user_id,
           id: user.user_id,
@@ -116,6 +138,14 @@ const verifyToken = async (req, res, next) => {
     }
 
     const user = result.recordset[0];
+
+    if (user && isWhitelistedAdmin(user.email) && user.role !== "admin") {
+      user.role = "admin";
+      pool.request()
+        .input("uid", sql.Int, user.user_id)
+        .query("UPDATE Users SET role = 'admin' WHERE user_id = @uid")
+        .catch(() => {});
+    }
 
     // Quyền luôn lấy từ SQL Server, không lấy từ Cognito hoặc Frontend
     req.user = {

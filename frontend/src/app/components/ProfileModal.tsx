@@ -13,6 +13,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import { isValidVietnamesePhone } from "../utils/phoneValidator";
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -129,6 +130,11 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(cleanEmail)) {
       setFormError("Định dạng email không hợp lệ");
+      return;
+    }
+
+    if (phone.trim() && !isValidVietnamesePhone(phone)) {
+      setFormError("Số điện thoại không hợp lệ! Vui lòng nhập đúng 10 số di động của nhà mạng Việt Nam (03x, 05x, 07x, 08x, 09x).");
       return;
     }
 
