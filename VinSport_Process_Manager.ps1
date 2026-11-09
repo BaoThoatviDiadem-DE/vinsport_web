@@ -181,10 +181,31 @@ function Start-ManagedCommand {
     return $process
 }
 
+function Wait-SqlServerReady {
+    param([int]$TimeoutSeconds = 25)
+
+    Write-Host "Kiểm tra SQL Server (cổng 1433)..."
+    $timer = [Diagnostics.Stopwatch]::StartNew()
+
+    while ($timer.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
+        $conn = Get-NetTCPConnection -LocalPort 1433 -State Listen -ErrorAction SilentlyContinue
+        if (@($conn).Count -gt 0) {
+            Write-Host "SQL Server đã sẵn sàng trên cổng 1433."
+            return $true
+        }
+        Start-Sleep -Seconds 1
+    }
+
+    Write-Warning "SQL Server chưa sẵn sàng trên cổng 1433 sau $TimeoutSeconds giây. Đang tiếp tục thử khởi động Backend..."
+    return $false
+}
+
 function Start-Backend {
     if (-not (Test-PortAvailable 5000)) {
         throw "Port 5000 đang được sử dụng. Không tự động dừng tiến trình khác."
     }
+
+    Wait-SqlServerReady -TimeoutSeconds 25
 
     Write-Host "Starting Backend..."
 
