@@ -1,4 +1,4 @@
-﻿param(
+param(
     [Parameter(Mandatory = $true)]
     [ValidateSet("Check", "StartLocal", "StartPublic", "StopTunnel", "Stop")]
     [string]$Mode
