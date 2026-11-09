@@ -298,17 +298,6 @@ export default function AdminHistory() {
             Theo dõi nhật ký thay đổi, snapshot dữ liệu đã xóa và khôi phục trực tiếp vào Database
           </p>
         </div>
-
-        <button
-          type="button"
-          onClick={loadHistory}
-          disabled={isLoading}
-          className="self-start md:self-auto flex items-center gap-2 px-4 py-2 bg-orange-50 hover:bg-orange-100 text-orange-600 rounded-xl font-semibold text-xs border border-orange-200 transition-all cursor-pointer disabled:opacity-50"
-          title="Làm mới dữ liệu lịch sử"
-        >
-          <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-          <span>Làm mới dữ liệu</span>
-        </button>
       </div>
 
       {/* KPI Stats Row */}
