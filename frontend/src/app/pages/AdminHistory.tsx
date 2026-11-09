@@ -294,9 +294,6 @@ export default function AdminHistory() {
               Lịch sử dữ liệu
             </h1>
           </div>
-          <p className="text-slate-500 text-xs md:text-sm">
-            Theo dõi nhật ký thay đổi, snapshot dữ liệu đã xóa và khôi phục trực tiếp vào Database
-          </p>
         </div>
       </div>
 
@@ -364,11 +361,10 @@ export default function AdminHistory() {
             <button
               type="button"
               onClick={clearAllFilters}
-              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
-                hasActiveFilters
+              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${hasActiveFilters
                   ? "text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 border-orange-200 shadow-sm active:scale-95"
                   : "text-slate-400 hover:text-slate-600 bg-slate-50 hover:bg-slate-100 border-slate-200"
-              }`}
+                }`}
               title="Xóa tất cả bộ lọc tìm kiếm"
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -413,9 +409,8 @@ export default function AdminHistory() {
                     }
                     setShowBatchDeleteModal(true);
                   }}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-white font-bold text-xs shadow-sm active:scale-95 transition-all cursor-pointer ${
-                    selectedIds.size > 0 ? "bg-red-600 hover:bg-red-700" : "bg-red-500/80 hover:bg-red-600"
-                  }`}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-white font-bold text-xs shadow-sm active:scale-95 transition-all cursor-pointer ${selectedIds.size > 0 ? "bg-red-600 hover:bg-red-700" : "bg-red-500/80 hover:bg-red-600"
+                    }`}
                   title="Xóa vĩnh viễn các bản ghi đã chọn khỏi lịch sử"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -497,16 +492,14 @@ export default function AdminHistory() {
                           e.stopPropagation();
                           setEntityFilterOpen((prev) => !prev);
                         }}
-                        className={`flex items-center gap-1.5 font-semibold text-xs transition-colors py-1 px-2.5 -ml-2 rounded-lg hover:bg-slate-200/80 cursor-pointer ${
-                          entityFilter !== "all" ? "text-orange-600 bg-orange-50/80" : "text-slate-800"
-                        }`}
+                        className={`flex items-center gap-1.5 font-semibold text-xs transition-colors py-1 px-2.5 -ml-2 rounded-lg hover:bg-slate-200/80 cursor-pointer ${entityFilter !== "all" ? "text-orange-600 bg-orange-50/80" : "text-slate-800"
+                          }`}
                         title="Bấm để lọc theo đối tượng dữ liệu"
                       >
                         <span>Đối tượng</span>
                         <Filter
-                          className={`w-3.5 h-3.5 ${
-                            entityFilter !== "all" ? "text-orange-600 fill-orange-500" : "text-slate-400"
-                          }`}
+                          className={`w-3.5 h-3.5 ${entityFilter !== "all" ? "text-orange-600 fill-orange-500" : "text-slate-400"
+                            }`}
                         />
                         {entityFilter !== "all" && <span className="w-2 h-2 rounded-full bg-orange-600" />}
                       </button>
@@ -532,11 +525,10 @@ export default function AdminHistory() {
                                   setEntityFilter(opt.value);
                                   setEntityFilterOpen(false);
                                 }}
-                                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
-                                  entityFilter === opt.value
+                                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${entityFilter === opt.value
                                     ? "bg-orange-50 text-orange-600 font-bold"
                                     : "text-slate-600 hover:bg-slate-50"
-                                }`}
+                                  }`}
                               >
                                 {opt.label}
                               </button>
@@ -560,9 +552,8 @@ export default function AdminHistory() {
                           if (!searchOpen) setTempSearch(search);
                           setSearchOpen((prev) => !prev);
                         }}
-                        className={`flex items-center gap-1.5 font-semibold text-xs transition-colors py-1 px-2.5 -ml-2 rounded-lg hover:bg-slate-200/80 cursor-pointer ${
-                          search ? "text-orange-600 bg-orange-50/80" : "text-slate-800"
-                        }`}
+                        className={`flex items-center gap-1.5 font-semibold text-xs transition-colors py-1 px-2.5 -ml-2 rounded-lg hover:bg-slate-200/80 cursor-pointer ${search ? "text-orange-600 bg-orange-50/80" : "text-slate-800"
+                          }`}
                         title="Bấm để tìm kiếm nội dung"
                       >
                         <Search
@@ -626,16 +617,14 @@ export default function AdminHistory() {
                           e.stopPropagation();
                           setStatusFilterOpen((prev) => !prev);
                         }}
-                        className={`flex items-center gap-1.5 font-semibold text-xs transition-colors py-1 px-2.5 -ml-2 rounded-lg hover:bg-slate-200/80 cursor-pointer ${
-                          statusFilter !== "all" ? "text-orange-600 bg-orange-50/80" : "text-slate-800"
-                        }`}
+                        className={`flex items-center gap-1.5 font-semibold text-xs transition-colors py-1 px-2.5 -ml-2 rounded-lg hover:bg-slate-200/80 cursor-pointer ${statusFilter !== "all" ? "text-orange-600 bg-orange-50/80" : "text-slate-800"
+                          }`}
                         title="Bấm để lọc theo trạng thái khôi phục"
                       >
                         <span>Trạng thái</span>
                         <Filter
-                          className={`w-3.5 h-3.5 ${
-                            statusFilter !== "all" ? "text-orange-600 fill-orange-500" : "text-slate-400"
-                          }`}
+                          className={`w-3.5 h-3.5 ${statusFilter !== "all" ? "text-orange-600 fill-orange-500" : "text-slate-400"
+                            }`}
                         />
                         {statusFilter !== "all" && <span className="w-2 h-2 rounded-full bg-orange-600" />}
                       </button>
@@ -659,11 +648,10 @@ export default function AdminHistory() {
                                   setStatusFilter(opt.value);
                                   setStatusFilterOpen(false);
                                 }}
-                                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
-                                  statusFilter === opt.value
+                                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${statusFilter === opt.value
                                     ? "bg-orange-50 text-orange-600 font-bold"
                                     : "text-slate-600 hover:bg-slate-50"
-                                }`}
+                                  }`}
                               >
                                 {opt.label}
                               </button>
@@ -718,9 +706,8 @@ export default function AdminHistory() {
                       <tr
                         key={item.id}
                         onClick={isSelecting ? () => toggleSelectId(item.id) : undefined}
-                        className={`transition-colors select-none ${
-                          isChecked ? "bg-orange-50/70 hover:bg-orange-100/60" : "hover:bg-slate-50/70"
-                        } ${isSelecting ? "cursor-pointer" : ""}`}
+                        className={`transition-colors select-none ${isChecked ? "bg-orange-50/70 hover:bg-orange-100/60" : "hover:bg-slate-50/70"
+                          } ${isSelecting ? "cursor-pointer" : ""}`}
                       >
                         {/* Checkbox khi ở chế độ Chọn */}
                         {isSelecting && (
