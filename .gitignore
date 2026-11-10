@@ -54,3 +54,19 @@ coverage/
 __pycache__/
 *.py[cod]
 *.class
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Python runtime
+__pycache__/
+*.py[cod]
+*.pyo
+
+# AWS credentials
+.aws/
+
+# Local backup files
+*.bak
+*.bak-*
